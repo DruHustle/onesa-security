@@ -57,7 +57,9 @@ jobs:
           p=Path("sdk-drift-report.json")
           d=json.loads(p.read_text()) if p.exists() else {"status":"missing"}
           outcome=os.environ.get("TEST_OUTCOME") or "not-run"
-          d["candidate_compatibility"]={"outcome":outcome}
+          existing=d.get("candidate_compatibility", {}).get("outcome")
+          if not (outcome == "success" and existing == "skipped"):
+              d["candidate_compatibility"]={"outcome":outcome}
           p.write_text(json.dumps(d, indent=2)+"\n")
           PY
       - name: Publish report in workflow summary

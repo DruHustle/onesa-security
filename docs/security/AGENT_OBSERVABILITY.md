@@ -5,8 +5,7 @@ Instrument agents with an authenticated analyst-authorized POST to `/v1/ai/agent
 The metadata contract includes UUID trace/span IDs, optional parent, stable agent reference,
 execution phase, outcome, reported microseconds and timestamp. Never include prompt,
 retrieval content, tool arguments, personal data, credentials or model output. Access is tenant
-scoped; duplicated spans are rejected. The dashboard is a **refreshable, near-current snapshot**
-of the last 100 spans, not a continuous real-time stream; full streaming remains unimplemented.
+scoped; duplicated spans are rejected. The dashboard polls every 2 seconds while visible, retrieving the last 100 tenant-authorized spans. This is near-real-time monitoring, not a lossless streamed event subscription. No agent is automatically instrumented; explicit reviewed SDK or agent integration is required.
 Reported durations are client telemetry and must not be mistaken for independently
 server-measured agent timings. Agent registration and native instrumenting SDK remain required.
 

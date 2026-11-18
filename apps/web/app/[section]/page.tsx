@@ -3,6 +3,7 @@ import {auth0} from "../../lib/auth0";
 import {securityApi} from "../../lib/server-api";
 import {sections} from "../../lib/nav";
 import {Shell, SectionHeader, EmptyState, Warning} from "../../components/Shell";
+import {AgentTraceLive} from "../../components/AgentTraceLive";
 import {GuardrailTester} from "../../components/GuardrailTester";
 import {AlertAction} from "../../components/AlertAction";
 import {FindingAction, ProposalCreator, ProposalDecision} from "../../components/ReviewActions";
@@ -109,17 +110,5 @@ async function CompliancePage() {
 async function AgentTracesPage() {
   const response = await securityApi<AgentSpan[]>("/v1/ai/agent-traces");
   if (!response.ok) return <Warning>{response.error}</Warning>;
-  return <section className="panel">
-    <div className="panel-heading"><div><h2>Agent execution paths</h2>
-      <p>Metadata-only trace view. Reload to fetch up to 100 most recent spans; this is not a continuous live stream.</p></div>
-      <span className="label-pill">{response.data.length} spans</span></div>
-    {response.data.length ? <div className="table-wrap"><table>
-      <thead><tr><th>Agent</th><th>Trace</th><th>Span / parent</th><th>Phase</th><th>Outcome</th><th>Duration</th><th>Reported</th></tr></thead>
-      <tbody>{response.data.map(x=><tr key={x.span_id}>
-      <td>{x.agent_ref}</td><td className="mono">{x.trace_id.slice(0,8)}</td>
-      <td className="mono">{x.span_id.slice(0,8)} / {x.parent_span_id?.slice(0,8) || "root"}</td>
-      <td>{x.phase}</td><td>{x.outcome}</td><td>{(x.elapsed_us / 1000).toFixed(2)} ms</td>
-      <td>{date(x.occurred_at)}</td></tr>)}</tbody></table></div>
-      : <EmptyState heading="No agent execution spans" body="Only instrumented agents authorized for this organization are represented. Absence of traces does not prove agent safety."/>}
-  </section>;
+  return <AgentTraceLive initial={response.data}/>;
 }

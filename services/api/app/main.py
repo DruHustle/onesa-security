@@ -7,7 +7,7 @@ from uuid import UUID
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, inspect, select, text, update
+from sqlalchemy import func, inspect as sqlalchemy_inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -86,7 +86,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         }
         try:
             db.execute(text("SELECT 1"))
-            if not required.issubset(set(inspect(db.get_bind()).get_table_names())):
+            if not required.issubset(set(sqlalchemy_inspect(db.get_bind()).get_table_names())):
                 raise RuntimeError("Security schema migrations are incomplete")
             if db.get_bind().dialect.name == "postgresql":
                 role = db.execute(text(

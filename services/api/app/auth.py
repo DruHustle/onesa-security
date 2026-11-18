@@ -1,4 +1,5 @@
 import hashlib
+from functools import lru_cache
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,12 +21,17 @@ class Principal:
     role: str
 
 
+@lru_cache(maxsize=8)
+def _jwks_client(uri: str):
+    return PyJWKClient(uri, cache_jwk_set=True, lifespan=300, timeout=4)
+
+
 def verify_access_token(token: str, settings) -> str:
     if len(token) > 8192:
         raise HTTPException(401, "Invalid access token")
     try:
         jwks_uri = settings.oidc_issuer.rstrip("/") + "/.well-known/jwks.json"
-        signing_key = PyJWKClient(jwks_uri, cache_jwk_set=True, lifespan=300, timeout=4).get_signing_key_from_jwt(token)
+        signing_key = _jwks_client(jwks_uri).get_signing_key_from_jwt(token)
         claims = jwt.decode(token, signing_key.key, algorithms=["RS256"],
                             audience=settings.oidc_audience, issuer=settings.oidc_issuer,
                             options={"require": ["sub", "aud", "exp", "iat", "iss"]}, leeway=30)

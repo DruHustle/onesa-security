@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import ipaddress
 from os import environ
 from urllib.parse import urlsplit
 
@@ -24,9 +25,17 @@ class Settings:
         upstream = environ.get("AI_UPSTREAM_URL") or None
         if upstream:
             u = urlsplit(upstream)
+            allowed_hosts = {v.strip().lower() for v in environ.get("AI_UPSTREAM_ALLOWED_HOSTS", "").split(",") if v.strip()}
             if (u.scheme != "https" or not u.hostname or u.username or u.password or u.query
-                    or u.fragment or u.path != "/v1/chat/completions"):
-                raise RuntimeError("AI_UPSTREAM_URL must be a fixed HTTPS /v1/chat/completions endpoint")
+                    or u.fragment or u.path != "/v1/chat/completions" or u.port not in (None, 443)
+                    or u.hostname.lower() not in allowed_hosts or u.hostname.lower() == "localhost"
+                    or u.hostname.lower().endswith((".local", ".internal"))):
+                raise RuntimeError("AI upstream must be a reviewed HTTPS provider host in AI_UPSTREAM_ALLOWED_HOSTS")
+            try:
+                ipaddress.ip_address(u.hostname)
+                raise RuntimeError("IP-literal AI upstreams are refused; use reviewed provider hostnames")
+            except ValueError:
+                pass
         return cls(
             database_url=environ.get("DATABASE_URL", ""),
             oidc_issuer=issuer if issuer.endswith("/") else issuer + "/",

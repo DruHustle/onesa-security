@@ -87,3 +87,18 @@ def test_input_validation_and_no_cross_tenant_case_mutation(harness):
     client, auth, _, b = harness
     assert client.post("/v1/collectors", headers=auth(), json={"name": "okay", "extra": "ignored?"}).status_code == 422
     assert client.patch(f"/v1/alerts/{uuid4()}", headers=auth(), json={"status": "open"}).status_code == 404
+
+
+def test_mtls_gate_refuses_unverified_ingestion_by_default(tmp_path, monkeypatch):
+    from app import main as api
+    from app.config import Settings
+    from app.database import create_local_schema
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from fastapi.testclient import TestClient
+    engine=create_engine(f"sqlite:///{tmp_path / 'mtls.db'}", connect_args={"check_same_thread":False})
+    create_local_schema(engine)
+    cfg=Settings(database_url="sqlite:///unused",oidc_issuer="https://auth.onesa.eu/",oidc_audience="https://security-api.onesa.eu")
+    client=TestClient(api.create_app(cfg,sessionmaker(engine)))
+    assert client.post("/v1/collector/assets",headers={"Authorization":"Collector " + "a"*100},
+                       json={"external_ref":"host-0001","category":"endpoint","label":"Host"}).status_code == 403

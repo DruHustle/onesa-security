@@ -59,6 +59,8 @@ A local Docker Compose stack is in [`compose.dev.yaml`](compose.dev.yaml); it re
 
 ## Release contract
 
-The overall release is **NO-GO** for customer production. An API unit test result is not an endpoint integration acceptance, and a successful UI build is not security approval. The remaining hard gates include dedicated Auth0 audience and browser callback, actual PostgreSQL RLS test against the least-privilege role, enforced client mTLS and secure enrollment, complete OWASP-style AI security evaluation, real OS-specific agent tests, audit immutability and recovery, throughput/latency benchmarks, hosted UI qualification and dependency locks/CI review.
+The overall release is **NO-GO** for customer production. An API unit test result is not an endpoint integration acceptance, and a successful UI build is not security approval. Local regression run: **10 API tests passed, 1 Linux unit test passed**. The first GitHub Actions PR run reported failure for every job before any job steps appeared, and downloadable logs were unavailable; the hosted verification result is therefore not qualified.
+
+The remaining hard gates include dedicated Auth0 audience and browser callback, actual PostgreSQL RLS test against the least-privilege role, enforced client mTLS and secure enrollment, complete OWASP-style AI security evaluation, real OS-specific agent tests, audit immutability and recovery, throughput/latency benchmarks, hosted UI qualification and dependency locks/CI review.
 
 Do not create DNS, enable paid services, install endpoint components on customer machines, run production scans or claim regulatory compliance based on this foundation. See the release decision for scope-by-scope gates.

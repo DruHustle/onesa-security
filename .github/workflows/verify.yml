@@ -62,9 +62,20 @@ jobs:
                   bad.append(str(p))
           assert not bad, f'Blocked source artifacts: {bad}'
           PY
-      - name: Dependency vulnerability analysis
+      - name: Install credential-free security analyzers
+        run: python -m pip install 'pip-audit>=2.9,<3' 'bandit>=1.8,<2' 'detect-secrets>=1.5,<2'
+      - name: Analyze Python code for high-confidence security bugs
+        run: bandit -r services/api/app -ll -ii
+      - name: Audit installed API dependency versions (fail on known vulnerabilities)
         run: |
-          python -m pip install pip-audit
           python -m pip install -e ./services/api
-          python -m pip_audit --disable-pip --no-deps --require-hashes /dev/null || true
-          # TODO replace above with fully hashed locked requirements; release gate remains NO-GO.
+          python -m pip_audit --strict
+      - name: Scan committed text for potential credential leaks
+        run: |
+          detect-secrets scan --all-files --no-verify > /tmp/onesa-secret-findings.json
+          python - <<'PYCODE'
+          import json
+          d=json.load(open('/tmp/onesa-secret-findings.json'))
+          findings=[(path,len(items)) for path,items in d.get('results',{}).items() if items]
+          if findings: raise SystemExit(f'Secret candidates require review: {findings}')
+          PYCODE

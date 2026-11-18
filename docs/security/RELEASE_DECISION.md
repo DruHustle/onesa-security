@@ -13,3 +13,7 @@
 | Compliance and commercial | Planned UI only | No framework evidence, billing or contract qualification | NO-GO |
 
 **Qualify next:** obtain a signed identity integration approval and staging client, validate PostgreSQL RLS with least-privilege service role, implement ingress mTLS against a real collector, create locked frontend dependencies, run full hosted CI/quality gates, implement backup/restore, risk acceptance and independent security review. Do not create DNS records or deploy live APIs based solely on this document.
+
+## CI receipt
+
+Initial draft PR #1, run [44291034754](https://github.com/DruHustle/onesa-security/actions/runs/44291034754) reported failure on all three jobs, with no listed job steps and logs unavailable through the connected API. This provides **no evidence that source tests executed in GitHub Actions**, and no defensible attribution to specific code failures. Inspect repository Actions permissions, runner capacity/billing and GitHub's workflow annotations before retrying. Do not change branch protection or suppress scanner failures to get a green badge.

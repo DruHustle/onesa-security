@@ -46,6 +46,12 @@ jobs:
       - name: Check Linux collector fixture
         working-directory: agents/linux
         run: python -m unittest -q test_collector.py test_posture.py
+      - name: Build production-structured API container image
+        run: docker build --file services/api/Dockerfile --tag onesa-security-api:ci services/api
+      - name: Smoke test non-root read-only API container with actual PostgreSQL
+        env:
+          ONESA_RLS_TEST_APP_URL: postgresql+psycopg://onesa_api:ci-local-rls-user@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
+        run: bash scripts/smoke_api_container.sh
   web:
     name: Browser source build (not deployed qualification)
     runs-on: ubuntu-24.04

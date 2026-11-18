@@ -1,0 +1,71 @@
+name: Upstream SDK compatibility surveillance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+permissions:
+  contents: read
+  issues: write
+jobs:
+  detect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Compare reviewed SDK versions with upstream published versions
+        id: drift
+        continue-on-error: true
+        run: python scripts/check_sdk_drift.py
+        env:
+          ONESA_SDK_DRIFT_REPORT: sdk-drift-report.json
+      - name: Publish report in workflow summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path("sdk-drift-report.json")
+          d=json.loads(p.read_text()) if p.exists() else {"status":"missing"}
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## Onesa SDK drift monitoring\n\n")
+              f.write("Status: **" + str(d["status"]) + "**\n\n")
+              for item in d.get("packages", []):
+                  f.write("- " + item["package"] + ": " + item["pinned"] + " → " + item["latest"] + "\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdk-drift-evidence
+          path: sdk-drift-report.json
+          if-no-files-found: warn
+      - name: Open or update a tracked review issue when registry versions change
+        if: steps.drift.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open("sdk-drift-report.json"))
+          if d["status"] == "current":
+              raise SystemExit(0)
+          open("sdk-drift-issue.md","w").write(
+              "Automated SDK surveillance status: **" + d["status"] + "**.\n"
+              "Re-run compatibility, security and guardrail latency suites before updating.\n"
+              "No production SDKs were upgraded.\n\n"
+              + "\n".join("- " + p["package"] + ": " + p["pinned"] + " → " + p["latest"]
+                          for p in d.get("packages",[]))
+              + "\n")
+          PY
+          existing=$(gh issue list --state open --search '"Onesa SDK compatibility review" in:title' --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file sdk-drift-issue.md
+          else
+            gh issue create --title "Onesa SDK compatibility review" --body-file sdk-drift-issue.md
+          fi
+      - name: Fail on unreviewed drift or unavailable registries
+        if: steps.drift.outcome == 'failure'
+        run: exit 1

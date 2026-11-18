@@ -1,0 +1,62 @@
+# LOCAL DEVELOPMENT ONLY. Never expose this Compose deployment on a public network.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DEV_DB_ADMIN_PASSWORD:?Set non-production administrator password}
+      POSTGRES_DB: onesa_security
+      APP_DB_PASSWORD: ${DEV_APP_DB_PASSWORD:?Set non-production API database password}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./infra/initdb/01-install.sh:/docker-entrypoint-initdb.d/01-install.sh:ro
+      - ./services/api/migrations/001_initial.sql:/schema/001_initial.sql:ro
+      - ./services/api/migrations/002_findings_and_approvals.sql:/schema/002_findings_and_approvals.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d onesa_security"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+  api:
+    build: ./services/api
+    environment:
+      DATABASE_URL: postgresql+psycopg://onesa_api:${DEV_APP_DB_PASSWORD}@db:5432/onesa_security
+      OIDC_ISSUER: https://auth.onesa.eu/
+      OIDC_AUDIENCE: https://security-api.onesa.eu
+      ONESA_SECURITY_ENV: development
+      ONESA_DEV_ISOLATED: "1" # explicitly acknowledge loopback-only developer service
+      COLLECTOR_REQUIRE_MTLS: "false" # isolated developer preview ONLY, no public ingress
+    depends_on:
+      db: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks: [internal]
+  web:
+    image: node:24-alpine
+    working_dir: /src
+    command: sh -c 'npm install --ignore-scripts --no-audit && npm run dev -- --hostname 0.0.0.0'
+    environment:
+      ONESA_API_ORIGIN: http://api:8080
+      ONESA_ORGANIZATION_ID: ${ONESA_ORGANIZATION_ID:?Set tenant UUID}
+      OIDC_AUDIENCE: https://security-api.onesa.eu
+      AUTH0_DOMAIN: auth.onesa.eu
+      AUTH0_CLIENT_ID: ${AUTH0_CLIENT_ID:?Set registered development OIDC client}
+      AUTH0_CLIENT_SECRET: ${AUTH0_CLIENT_SECRET:?Set OIDC client secret}
+      AUTH0_SECRET: ${AUTH0_SECRET:?Set 32-byte SDK secret}
+      APP_BASE_URL: http://localhost:3000
+    volumes:
+      - ./apps/web:/src:ro
+      - web_modules:/src/node_modules
+      - web_build:/src/.next
+    depends_on: [api]
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [internal]
+networks:
+  internal:
+    internal: false # Dependency download/real OIDC discovery required; no externally exposed service ports.
+volumes:
+  db_data:
+  web_modules:
+  web_build:

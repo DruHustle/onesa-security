@@ -1,0 +1,103 @@
+name: Security foundation verification
+on:
+  pull_request:
+  push:
+    branches: [main, dev, staging]
+permissions:
+  contents: read
+jobs:
+  api:
+    name: Python security workflows
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-local-pg-owner  # pragma: allowlist secret
+          POSTGRES_DB: onesa_security_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d onesa_security_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - name: Install pinned major dependencies and test extras
+        run: python -m pip install -e './services/api[test]'
+      - name: Create isolated PostgreSQL schema and least-privilege role
+        env:
+          ONESA_RLS_TEST_ADMIN_URL: postgresql://postgres:ci-local-pg-owner@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
+        run: python services/api/tests/setup_postgres_ci.py
+      - name: Execute authorization, detection, guardrail and real PostgreSQL RLS tests
+        working-directory: services/api
+        env:
+          ONESA_RLS_TEST_APP_URL: postgresql+psycopg://onesa_api:ci-local-rls-user@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
+        run: python -m pytest -q
+      - name: Check syntax
+        run: python -m compileall -q services/api/app agents/linux
+      - name: Enforce synthetic guardrail latency budget
+        working-directory: services/api
+        run: python tests/benchmark_guardrail.py
+      - name: Check Linux collector fixture
+        working-directory: agents/linux
+        run: python -m unittest -q test_collector.py test_posture.py
+  web:
+    name: Browser source build (not deployed qualification)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install exact lockfile dependencies
+        working-directory: apps/web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Type check
+        working-directory: apps/web
+        run: npm run typecheck
+      - name: Build Next.js frontend
+        working-directory: apps/web
+        run: npm run build
+  inventory:
+    name: Supply-chain baseline
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - name: Check disallowed source artifacts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bad=[]
+          for p in Path('.').rglob('*'):
+              if p.is_file() and (p.name == '.env' or p.suffix in {'.pem','.key','.p12','.pfx','.sqlite','.db'}):
+                  bad.append(str(p))
+          assert not bad, f'Blocked source artifacts: {bad}'
+          PY
+      - name: Install credential-free security analyzers
+        run: python -m pip install 'pip-audit>=2.9,<3' 'bandit>=1.8,<2' 'detect-secrets>=1.5,<2'
+      - name: Analyze Python code for high-confidence security bugs
+        run: bandit -r services/api/app -ll -ii
+      - name: Audit published API runtime dependencies (fail on known vulnerabilities)
+        run: |
+          # Audit the pyproject dependency graph without looking up the
+          # unpublished local editable application on public PyPI.
+          python -m pip_audit --strict --progress-spinner off ./services/api
+      - name: Scan committed text for potential credential leaks
+        run: |
+          # Ignore Git transport metadata, not committed application source.
+          # FETCH_HEAD is created by checkout and is not a tracked project file.
+          detect-secrets scan --all-files --no-verify --exclude-files '(^|/)\.git/' > /tmp/onesa-secret-findings.json
+          python - <<'PYCODE'
+          import json
+          d=json.load(open('/tmp/onesa-secret-findings.json'))
+          findings=[(path,len(items)) for path,items in d.get('results',{}).items() if items]
+          if findings: raise SystemExit(f'Secret candidates require review: {findings}')
+          PYCODE

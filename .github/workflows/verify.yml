@@ -110,6 +110,6 @@ jobs:
           python - <<'PYCODE'
           import json
           d=json.load(open('/tmp/onesa-secret-findings.json'))
-          findings=[(path,len(items)) for path,items in d.get('results',{}).items() if items]
+          findings=[(path, [(x.get('line_number'),x.get('type')) for x in items]) for path,items in d.get('results',{}).items() if items]
           if findings: raise SystemExit(f'Secret candidates require review: {findings}')
           PYCODE

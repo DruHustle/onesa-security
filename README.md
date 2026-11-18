@@ -2,7 +2,7 @@
 
 **Onesa UG · defensive cybersecurity platform · initial functional foundation (NOT production-qualified)**
 
-Canonical repository: `DruHustle/onesa-security`. Planned UI: `security.onesa.eu`; planned API: `security-api.onesa.eu`. These names are targets only, **not evidence of deployment or live protection**.
+Canonical repository: `DruHustle/onesa-security`. Protected frontend domain: `https://security.onesa.eu` (Cloudflare DNS, Vercel HTTPS and Vercel Authentication verified on 2026-11-18). Intended backend API: `security-api.onesa.eu` (**not deployed or DNS-routed**). The frontend's build being READY does **not** imply live customer protection.
 
 ## What works in this source
 
@@ -61,9 +61,9 @@ A local Docker Compose stack is in [`compose.dev.yaml`](compose.dev.yaml); it re
 
 The overall release is **NO-GO** for customer production. An API unit test result is not an endpoint integration acceptance, and a successful UI build is not security approval. Local regression run: **10 API tests passed, 1 Linux unit test passed**. The initial GitHub Actions PR run failed before any job executed, but later source CI passed for main at `4bf5fe3` (run `44389541981`). This source-only success is not hosted identity, backend, or customer-production qualification.
 
-The remaining hard gates include dedicated Auth0 audience and browser callback, actual PostgreSQL RLS test against the least-privilege role, enforced client mTLS and secure enrollment, complete OWASP-style AI security evaluation, real OS-specific agent tests, audit immutability and recovery, throughput/latency benchmarks, hosted UI qualification and dependency locks/CI review.
+The hosted source CI now exercises PostgreSQL row-level security using a non-bypass test role and a built restricted API container. Production still needs a dedicated Auth0 client with tested callback, actual Oracle API deployment and PostgreSQL backup/restore, verified ingress mTLS and secure collector enrollment, broader AI security evaluation, real OS-specific agent tests, audit immutability, throughput/latency benchmarks and authenticated browser qualification.
 
-Do not create DNS, enable paid services, install endpoint components on customer machines, run production scans or claim regulatory compliance based on this foundation. See the release decision for scope-by-scope gates.
+The **web-only DNS** and HTTPS host are configured behind Vercel Authentication. Do not publish the API domain, bypass access gates, enable paid services, install endpoint components, run production scans or claim regulatory compliance based on this foundation. See the release decision for scope-by-scope gates.
 
 ## Continued implementation scope (2026-11-18)
 
@@ -71,4 +71,4 @@ The review branch also implements source-referenced finding ingestion, analyst r
 
 API endpoints added: `GET /v1/findings`, `POST /v1/collector/findings`, `POST /v1/findings/{id}/resolve`, `GET/POST /v1/remediation-proposals`, `POST /v1/remediation-proposals/{id}/decision`, `GET /v1/compliance/readiness`. Collector evidence is reported—not independent verification. Remediation approval cannot trigger a remote command. Authentication remains Onesa Identity via Auth0; membership remains application-local and requires explicit bootstrap.
 
-Run Python tests in `services/api` with `python -m pytest -q` and the developer Linux tests in `agents/linux` with `python -m unittest -q test_collector.py test_posture.py`. CI includes disposable PostgreSQL RLS checks that require actual runner execution to count as evidence. The Next.js deployment may build on Vercel, but missing `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_SECRET`, `APP_BASE_URL`, API endpoint and authorized tenant means the website cannot be treated as operational.
+Run Python tests in `services/api` with `python -m pytest -q` and the developer Linux tests in `agents/linux` with `python -m unittest -q test_collector.py test_posture.py`. Hosted CI successfully ran disposable PostgreSQL RLS and actual Docker-container readiness checks on 2026-11-18. Vercel has `AUTH0_DOMAIN`, `OIDC_AUDIENCE`, `APP_BASE_URL` and separately generated production/preview `AUTH0_SECRET` values. The dedicated `AUTH0_CLIENT_ID` and `AUTH0_CLIENT_SECRET`, approved tenant, and deployed live API remain absent; the protected site cannot yet sign in a real customer or show telemetry.

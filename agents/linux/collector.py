@@ -31,8 +31,10 @@ def snapshot():
 
 def send(api_base, credential_file, ca_file, ssh_posture=False):
     parsed = urlsplit(api_base)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.path.rstrip("/"):
-        raise ValueError("An HTTPS origin is required")
+    if (parsed.scheme != "https" or not parsed.hostname or
+            parsed.username or parsed.password or parsed.query or parsed.fragment or
+            parsed.path not in ("", "/")):
+        raise ValueError("An HTTPS origin without credentials, query or fragment is required")
     secret_path = Path(credential_file)
     if (secret_path.stat().st_mode & 0o077) != 0:
         raise ValueError("Collector credential file must be chmod 600")

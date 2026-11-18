@@ -1,6 +1,7 @@
 export const sections = [
   {slug: "", title: "Security Overview", short: "Overview", group: "Monitor", live: true},
   {slug: "ai-security", title: "AI Security", short: "AI Security", group: "Monitor", live: true},
+  {slug: "ai-agent-traces", title: "AI Agent Traces", short: "Agent Traces", group: "Monitor", live: true},
   {slug: "threat-detection", title: "Threat Detection", short: "Threat Detection", group: "Monitor", live: true},
   {slug: "security-operations", title: "Security Operations", short: "Security Operations", group: "Respond", live: true},
   {slug: "assets-endpoints", title: "Assets & Endpoints", short: "Assets & Endpoints", group: "Respond", live: true},

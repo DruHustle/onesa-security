@@ -13,6 +13,7 @@ type Alert = {id: string; rule_id: string; title: string; explanation: string; s
 type Finding = {id: string; title: string; category: string; severity: string; asset_ref: string; status: string; cve_id: string|null; evidence_ref: string; source: string; last_seen: string; verified_by: string|null};
 type Proposal = {id: string; finding_id: string; action_type: string; action_summary: string; impact_summary: string; rollback_plan: string; requested_by: string; approved_by: string|null; status: string; execution_supported: boolean; created_at: string};
 type Readiness = {classification: string; frameworks: string[]; evidence: Record<string,number>; verified_control_count: number; limitations: string};
+type AgentSpan = {trace_id:string; span_id:string; parent_span_id:string|null; agent_ref:string; phase:string; outcome:string; elapsed_us:number; occurred_at:string; received_at:string};
 type Policy = {version: number; block_injection: boolean; redact_pii: boolean; description: string};
 
 function date(value: string) {const d = new Date(value);return Number.isNaN(d.valueOf()) ? "Unknown" : d.toLocaleString("en-GB", {dateStyle:"medium", timeStyle:"short", timeZone: "UTC"}) + " UTC";}
@@ -25,6 +26,7 @@ export default async function SectionPage({params}: {params: Promise<{section: s
   if (!session) redirect("/auth/login");
   const descriptions: Record<string,string> = {
     "ai-security": "Inspect authorized AI content with deterministic guardrails. The evaluation result is not a guarantee of safety.",
+    "ai-agent-traces": "Agent execution metadata reported by authorized instrumentation. Refresh to retrieve recent spans; raw arguments and prompts are never retained.",
     "threat-detection": "Real normalized security events from authorized sources. No simulated event counts.",
     "security-operations": "Explainable security alerts, evidence and analyst-driven case status changes.",
     "assets-endpoints": "Read-only inventory of systems actually reported by enrolled collectors.",
@@ -35,6 +37,7 @@ export default async function SectionPage({params}: {params: Promise<{section: s
   return <Shell active={section} name={session.user.name}><SectionHeader kicker={`${found.group.toUpperCase()} / ${found.live ? "WORKING FOUNDATION" : "PLANNED MODULE"}`} title={found.title} description={descriptions[section] || "This module is part of the Onesa Security roadmap. It is intentionally inactive until it can produce evidence-backed results."}/>
     {!found.live && <><Warning>Not enabled. No claims of protection, integration, compliance or successful remediation are made for this module.</Warning><div className="panel"><EmptyState heading="Module not commissioned" body="Implementation requires validated integration permissions, product authorization and independent acceptance tests. Current data is not simulated."/></div></>}
     {section === "ai-security" && <AIPage/>}
+    {section === "ai-agent-traces" && <AgentTracesPage/>}
     {section === "threat-detection" && <ThreatPage/>}
     {section === "security-operations" && <OperationsPage/>}
     {section === "assets-endpoints" && <AssetsPage/>}
@@ -100,4 +103,23 @@ async function CompliancePage() {
   return <><Warning>{response.data.classification}. {response.data.limitations}</Warning><section className="panel"><div className="panel-heading"><div><h2>Technical evidence register</h2><p>These are source counts only, not control-effectiveness assessments.</p></div></div>
   <div className="info-list">{Object.entries(response.data.evidence).map(([key,value])=><div key={key}><strong>{key.replaceAll("_"," ")}</strong><span>{value}</span></div>)}<div><strong>Verified controls</strong><span>{response.data.verified_control_count} — not audited</span></div></div>
   <h3>Frameworks to assess</h3><p>{response.data.frameworks.join(" · ")}</p><p className="info-text">An independent assessment and documented evidence mapping are required before making any compliance statements.</p></section></>;
+}
+
+
+async function AgentTracesPage() {
+  const response = await securityApi<AgentSpan[]>("/v1/ai/agent-traces");
+  if (!response.ok) return <Warning>{response.error}</Warning>;
+  return <section className="panel">
+    <div className="panel-heading"><div><h2>Agent execution paths</h2>
+      <p>Metadata-only trace view. Reload to fetch up to 100 most recent spans; this is not a continuous live stream.</p></div>
+      <span className="label-pill">{response.data.length} spans</span></div>
+    {response.data.length ? <div className="table-wrap"><table>
+      <thead><tr><th>Agent</th><th>Trace</th><th>Span / parent</th><th>Phase</th><th>Outcome</th><th>Duration</th><th>Reported</th></tr></thead>
+      <tbody>{response.data.map(x=><tr key={x.span_id}>
+      <td>{x.agent_ref}</td><td className="mono">{x.trace_id.slice(0,8)}</td>
+      <td className="mono">{x.span_id.slice(0,8)} / {x.parent_span_id?.slice(0,8) || "root"}</td>
+      <td>{x.phase}</td><td>{x.outcome}</td><td>{(x.elapsed_us / 1000).toFixed(2)} ms</td>
+      <td>{date(x.occurred_at)}</td></tr>)}</tbody></table></div>
+      : <EmptyState heading="No agent execution spans" body="Only instrumented agents authorized for this organization are represented. Absence of traces does not prove agent safety."/>}
+  </section>;
 }

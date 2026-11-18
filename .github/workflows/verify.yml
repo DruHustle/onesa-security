@@ -40,6 +40,9 @@ jobs:
         run: python -m pytest -q
       - name: Check syntax
         run: python -m compileall -q services/api/app agents/linux
+      - name: Enforce synthetic guardrail latency budget
+        working-directory: services/api
+        run: python tests/benchmark_guardrail.py
       - name: Check Linux collector fixture
         working-directory: agents/linux
         run: python -m unittest -q test_collector.py test_posture.py

@@ -94,7 +94,7 @@ jobs:
         run: |
           # Ignore Git transport metadata, not committed application source.
           # FETCH_HEAD is created by checkout and is not a tracked project file.
-          detect-secrets scan --all-files --no-verify --exclude-files '(^|/)\\.git/' > /tmp/onesa-secret-findings.json
+          detect-secrets scan --all-files --no-verify --exclude-files '(^|/)\.git/' > /tmp/onesa-secret-findings.json
           python - <<'PYCODE'
           import json
           d=json.load(open('/tmp/onesa-secret-findings.json'))

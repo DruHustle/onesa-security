@@ -1,8 +1,6 @@
 name: Upstream SDK compatibility surveillance
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/sdk-drift-candidate-tests]
   schedule:
     - cron: "17 6 * * 1"
 permissions:

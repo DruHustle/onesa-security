@@ -51,11 +51,9 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: '24'}
-      # A committed lockfile is required before production release.
-      # This initial candidate validates source/build but does not qualify reproducible release bytes.
-      - name: Install from published registry
+      - name: Install exact lockfile dependencies
         working-directory: apps/web
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Type check
         working-directory: apps/web
         run: npm run typecheck

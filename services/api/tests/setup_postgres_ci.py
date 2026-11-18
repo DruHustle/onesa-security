@@ -25,6 +25,20 @@ def main():
             cur.execute("GRANT USAGE ON SCHEMA public TO onesa_api")
             cur.execute("GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO onesa_api")
             cur.execute("REVOKE UPDATE ON audit_entries FROM onesa_api")
+            # Prove RLS against populated records, not only an empty database.
+            # These deterministic fixture IDs are confined to the disposable CI DB.
+            tenants = (
+                ("11111111-1111-4111-8111-111111111111", "Synthetic tenant A", "synthetic-a"),
+                ("22222222-2222-4222-8222-222222222222", "Synthetic tenant B", "synthetic-b"),
+            )
+            cur.executemany(
+                "INSERT INTO organizations (id, name, created_at) VALUES (%s, %s, now())",
+                [(tenant, label) for tenant, label, _ in tenants],
+            )
+            cur.executemany(
+                "INSERT INTO memberships (tenant_id, subject, role) VALUES (%s, %s, 'viewer')",
+                [(tenant, subject) for tenant, _, subject in tenants],
+            )
     print("Ephemeral PostgreSQL migrations applied with separated NOBYPASSRLS runtime role")
 
 

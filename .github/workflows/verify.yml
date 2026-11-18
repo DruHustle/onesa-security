@@ -1,0 +1,70 @@
+name: Security foundation verification
+on:
+  pull_request:
+  push:
+    branches: [main, dev, staging]
+permissions:
+  contents: read
+jobs:
+  api:
+    name: Python security workflows
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - name: Install pinned major dependencies and test extras
+        run: python -m pip install -e './services/api[test]'
+      - name: Execute authorization, detection and AI guardrail regression tests
+        working-directory: services/api
+        run: python -m pytest -q
+      - name: Check syntax
+        run: python -m compileall -q services/api/app agents/linux
+      - name: Check Linux collector fixture
+        working-directory: agents/linux
+        run: python -m unittest -q test_collector.py
+  web:
+    name: Browser source build (not deployed qualification)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      # A committed lockfile is required before production release.
+      # This initial candidate validates source/build but does not qualify reproducible release bytes.
+      - name: Install from published registry
+        working-directory: apps/web
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Type check
+        working-directory: apps/web
+        run: npm run typecheck
+      - name: Build Next.js frontend
+        working-directory: apps/web
+        run: npm run build
+  inventory:
+    name: Supply-chain baseline
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - name: Check disallowed source artifacts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          bad=[]
+          for p in Path('.').rglob('*'):
+              if p.is_file() and (p.name == '.env' or p.suffix in {'.pem','.key','.p12','.pfx','.sqlite','.db'}):
+                  bad.append(str(p))
+          assert not bad, f'Blocked source artifacts: {bad}'
+          PY
+      - name: Dependency vulnerability analysis
+        run: |
+          python -m pip install pip-audit
+          python -m pip install -e ./services/api
+          python -m pip_audit --disable-pip --no-deps --require-hashes /dev/null || true
+          # TODO replace above with fully hashed locked requirements; release gate remains NO-GO.

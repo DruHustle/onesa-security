@@ -15,7 +15,7 @@ class TelemetryTests(unittest.TestCase):
     def test_validated_https_mtls_default(self):
         for u in ("http://security-api.onesa.eu/v1/collector/ai/agent-traces",
                   "https://security-api.onesa.eu/v1/collector/ai/agent-traces?token=x",
-                  ("https://" + "user:" + "dummy" + "@security-api.onesa.eu/v1/collector/ai/agent-traces"),
+                  ("https://" + "user:" + "dummy" + "@security-api.onesa.eu/v1/collector/ai/agent-traces"),  # pragma: allowlist secret - synthetic invalid URL
                   "https://security-api.onesa.eu:8000/v1/collector/ai/agent-traces"):
             with self.assertRaises(ValueError):
                 AgentTracer(endpoint=u, collector_token=TEST_TOKEN,
@@ -29,7 +29,7 @@ class TelemetryTests(unittest.TestCase):
         trace=str(uuid4())
         with t.span(agent_ref="agent-01", phase="planning", trace_id=trace) as ctx:
             self.assertEqual(ctx["trace_id"], trace)
-            private_text = "never exported into telemetry"
+            private_text = "never exported into telemetry"  # pragma: allowlist secret - synthetic negative assertion
         self.assertTrue(t.flush())
         self.assertEqual(len(out), 1)
         event=out[0]

@@ -27,6 +27,18 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     app = FastAPI(title="Onesa Security API", version="0.1.0", docs_url=None, redoc_url=None)
     app.state.settings = cfg
 
+    @app.middleware("http")
+    async def private_api_headers(request: Request, call_next):
+        # This application exchanges tenant-scoped alerts, identity, evidence
+        # references and collector state. Intermediaries and browsers must not
+        # store even failed authenticated responses as shared cache entries.
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     def get_db():
         with session_factory() as db:
             try:

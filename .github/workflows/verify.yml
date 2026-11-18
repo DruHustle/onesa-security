@@ -13,7 +13,7 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_PASSWORD: ci-local-pg-owner
+          POSTGRES_PASSWORD: ci-local-pg-owner  # pragma: allowlist secret
           POSTGRES_DB: onesa_security_test
         ports: ['5432:5432']
         options: >-
@@ -31,12 +31,12 @@ jobs:
         run: python -m pip install -e './services/api[test]'
       - name: Create isolated PostgreSQL schema and least-privilege role
         env:
-          ONESA_RLS_TEST_ADMIN_URL: postgresql://postgres:ci-local-pg-owner@127.0.0.1:5432/onesa_security_test
+          ONESA_RLS_TEST_ADMIN_URL: postgresql://postgres:ci-local-pg-owner@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
         run: python services/api/tests/setup_postgres_ci.py
       - name: Execute authorization, detection, guardrail and real PostgreSQL RLS tests
         working-directory: services/api
         env:
-          ONESA_RLS_TEST_APP_URL: postgresql+psycopg://onesa_api:ci-local-rls-user@127.0.0.1:5432/onesa_security_test
+          ONESA_RLS_TEST_APP_URL: postgresql+psycopg://onesa_api:ci-local-rls-user@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
         run: python -m pytest -q
       - name: Check syntax
         run: python -m compileall -q services/api/app agents/linux

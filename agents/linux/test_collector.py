@@ -45,7 +45,7 @@ class CollectorTests(unittest.TestCase):
         untrusted = [
             "http://security.example.invalid",
             "https://user@security.example.invalid",
-            "https://user:pass@security.example.invalid",
+            "https://user:pass@security.example.invalid",  # pragma: allowlist secret
             "https://security.example.invalid/?debug=1",
             "https://security.example.invalid/#fragment",
             "https://security.example.invalid/other",

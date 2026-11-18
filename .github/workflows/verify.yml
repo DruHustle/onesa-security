@@ -82,10 +82,11 @@ jobs:
         run: python -m pip install 'pip-audit>=2.9,<3' 'bandit>=1.8,<2' 'detect-secrets>=1.5,<2'
       - name: Analyze Python code for high-confidence security bugs
         run: bandit -r services/api/app -ll -ii
-      - name: Audit installed API dependency versions (fail on known vulnerabilities)
+      - name: Audit published API runtime dependencies (fail on known vulnerabilities)
         run: |
-          python -m pip install -e ./services/api
-          python -m pip_audit --strict
+          # Audit the pyproject dependency graph without looking up the
+          # unpublished local editable application on public PyPI.
+          python -m pip_audit --strict --progress-spinner off ./services/api
       - name: Scan committed text for potential credential leaks
         run: |
           detect-secrets scan --all-files --no-verify > /tmp/onesa-secret-findings.json

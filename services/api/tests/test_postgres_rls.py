@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 from app.database import tenant_context
 from app.models import Organization, Membership, Collector, Finding
 
@@ -19,7 +20,7 @@ def test_postgres_real_force_rls():
     engine = create_engine(url)
     tenant_a, tenant_b = str(uuid4()), str(uuid4())
     try:
-        with engine.connect() as db:
+        with Session(engine) as db:
             role = db.execute(text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")).one()
             assert role == (False, False), "Application role may not bypass RLS"
             tables = ["organizations", "memberships", "collectors", "assets", "security_events",

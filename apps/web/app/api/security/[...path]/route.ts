@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth0 } from "../../../../lib/auth0";
+import { auth0, identityConfigured } from "../../../../lib/auth0";
 import { securityApi } from "../../../../lib/server-api";
 
 const readable = new Set(["overview", "assets", "events", "alerts", "findings", "remediation-proposals", "compliance/readiness", "ai/policy", "audit"]);
@@ -8,6 +8,7 @@ const uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
 type RouteContext = {params: Promise<{path: string[]}>};
 
 async function handleRequest(req: NextRequest, context: RouteContext) {
+  if (!identityConfigured) return NextResponse.json({error: "Onesa Security identity is not configured"}, {status: 503, headers: {"Cache-Control": "no-store"}});
   const session = await auth0.getSession();
   if (!session) return NextResponse.json({error: "Sign in required"}, {status: 401});
   const relative = (await context.params).path.join("/");

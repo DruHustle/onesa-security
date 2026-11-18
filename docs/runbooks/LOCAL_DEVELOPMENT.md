@@ -19,6 +19,9 @@ Set `DEV_DB_ADMIN_PASSWORD`, `DEV_APP_DB_PASSWORD` (URL-safe non-production valu
 
 ```sh
 docker compose -f compose.dev.yaml up -d --build
+# Compose sets ONESA_SECURITY_ENV=development and ONESA_DEV_ISOLATED=1
+# only for this loopback development API. Outside this explicit context,
+# COLLECTOR_REQUIRE_MTLS=false is rejected at startup.
 # Create only the approved initial organization and actual owner subject:
 docker compose -f compose.dev.yaml exec api python -m app.bootstrap \
   --org-id "$ONESA_ORGANIZATION_ID" --org-name "Onesa UG" --owner-sub "$ONESA_OWNER_SUB"

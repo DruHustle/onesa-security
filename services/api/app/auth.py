@@ -73,6 +73,12 @@ def authorize_collector(session, token: str, require_mtls: bool, mtls_verified: 
     collector = session.scalar(select(Collector).where(Collector.tenant_id == tenant_id,
         Collector.token_digest == digest, Collector.revoked.is_(False)))
     exp = collector.expires_at if collector else None
-    if not exp or exp.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+    # SQLite fixtures may return naive UTC; PostgreSQL can return aware
+    # timestamps in the connection's configured time zone. Replacing tzinfo
+    # on an aware timestamp shifts the instant and can extend a revoked-by-
+    # expiry collector credential. Convert aware values instead.
+    expiry_utc = (exp.replace(tzinfo=timezone.utc) if exp and exp.tzinfo is None
+                  else exp.astimezone(timezone.utc) if exp else None)
+    if expiry_utc is None or expiry_utc <= datetime.now(timezone.utc):
         raise HTTPException(401, "Invalid collector credential")
     return collector

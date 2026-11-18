@@ -9,6 +9,18 @@ permissions:
 jobs:
   detect:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-local-pg-owner  # pragma: allowlist secret
+          POSTGRES_DB: onesa_security_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d onesa_security_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,6 +34,32 @@ jobs:
         run: python scripts/check_sdk_drift.py
         env:
           ONESA_SDK_DRIFT_REPORT: sdk-drift-report.json
+      - uses: actions/setup-node@v4
+        if: steps.drift.outcome == 'failure'
+        with:
+          node-version: '24'
+      - name: Test changed upstream SDK candidates without promoting them
+        id: candidate_tests
+        if: steps.drift.outcome == 'failure'
+        continue-on-error: true
+        run: python scripts/test_sdk_candidates.py sdk-drift-report.json
+        env:
+          ONESA_RLS_TEST_ADMIN_URL: postgresql://postgres:ci-local-pg-owner@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
+          ONESA_RLS_TEST_APP_URL: postgresql+psycopg://onesa_api:ci-local-rls-user@127.0.0.1:5432/onesa_security_test  # pragma: allowlist secret
+      - name: Record compatibility test outcome
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.candidate_tests.outcome }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path("sdk-drift-report.json")
+          d=json.loads(p.read_text()) if p.exists() else {"status":"missing"}
+          outcome=os.environ.get("TEST_OUTCOME") or "not-run"
+          d["candidate_compatibility"]={"outcome":outcome}
+          p.write_text(json.dumps(d, indent=2)+"\n")
+          PY
       - name: Publish report in workflow summary
         if: always()
         run: |
@@ -33,6 +71,7 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
               f.write("## Onesa SDK drift monitoring\n\n")
               f.write("Status: **" + str(d["status"]) + "**\n\n")
+              f.write("Candidate compatibility tests: **" + str(d.get("candidate_compatibility", {}).get("outcome", "not run")) + "**\n\n")
               for item in d.get("packages", []):
                   f.write("- " + item["package"] + ": " + item["pinned"] + " → " + item["latest"] + "\n")
           PY
@@ -54,6 +93,7 @@ jobs:
               raise SystemExit(0)
           open("sdk-drift-issue.md","w").write(
               "Automated SDK surveillance status: **" + d["status"] + "**.\n"
+              "Candidate compatibility checks: **" + d.get("candidate_compatibility", {}).get("outcome", "not run") + "**.\n"
               "Re-run compatibility, security and guardrail latency suites before updating.\n"
               "No production SDKs were upgraded.\n\n"
               + "\n".join("- " + p["package"] + ": " + p["pinned"] + " → " + p["latest"]
@@ -67,5 +107,5 @@ jobs:
             gh issue create --title "Onesa SDK compatibility review" --body-file sdk-drift-issue.md
           fi
       - name: Fail on unreviewed drift or unavailable registries
-        if: steps.drift.outcome == 'failure'
+        if: steps.drift.outcome == 'failure' || steps.candidate_tests.outcome == 'failure'
         run: exit 1

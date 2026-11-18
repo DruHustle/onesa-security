@@ -39,3 +39,18 @@ def sanitize_model_output(text: str) -> Decision:
         return Decision("Block", "CREDENTIAL_IN_MODEL_OUTPUT", None)
     clean = EMAIL.sub("[REDACTED_EMAIL]", text)
     return Decision("Redact" if clean != text else "Allow", "OUTPUT_INSPECTED", clean)
+
+
+def inspect_with_budget(text: str, *, max_us: int = 20_000, **kwargs) -> tuple[Decision, int]:
+    """Bound measured synchronous inspection overhead; fail closed if the budget is exceeded.
+
+    This limit does not pre-empt Python execution. Callers must additionally enforce
+    upstream timeouts and benchmark P95/P99 under their own production workloads.
+    """
+    from time import perf_counter_ns
+    start = perf_counter_ns()
+    result = inspect_text(text, **kwargs)
+    elapsed_us = (perf_counter_ns() - start) // 1000
+    if elapsed_us > max_us:
+        return Decision("Block", "GUARDRAIL_EXECUTION_BUDGET_EXCEEDED", None), elapsed_us
+    return result, elapsed_us

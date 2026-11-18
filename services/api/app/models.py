@@ -159,3 +159,24 @@ class RemediationProposal(Base):
         ForeignKeyConstraint(["tenant_id", "finding_id"], ["findings.tenant_id", "findings.id"]),
         Index("remediation_queue", "tenant_id", "status", "created_at"),
     )
+
+
+class AgentTraceSpan(Base):
+    """Tenant-scoped metadata-only agent execution span; never store prompts or tool arguments."""
+    __tablename__ = "ai_agent_spans"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    span_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    parent_span_id: Mapped[str | None] = mapped_column(String(36))
+    agent_ref: Mapped[str] = mapped_column(String(120), nullable=False)
+    phase: Mapped[str] = mapped_column(String(25), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    elapsed_us: Mapped[int] = mapped_column(Integer, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id"], ["organizations.id"]),
+        UniqueConstraint("tenant_id", "agent_ref", "span_id"),
+        Index("ai_agent_trace_lookup", "tenant_id", "trace_id", "occurred_at"),
+    )

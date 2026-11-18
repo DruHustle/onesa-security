@@ -15,9 +15,9 @@ from .auth import Principal, authorize_collector, authorize_member, require_role
 from .config import Settings
 from .database import db_factory
 from .detection import evaluate_event
-from .guardrails import inspect_text, sanitize_model_output
-from .models import Alert, Asset, AuditEntry, Collector, Event, GuardrailPolicy, Finding, RemediationProposal, now
-from .schemas import AlertChange, AssetInput, ChatRequest, CollectorRegistration, EventInput, InspectRequest, PolicyUpdate, FindingInput, FindingResolution, RemediationRequest, RemediationDecision
+from .guardrails import inspect_text, sanitize_model_output, inspect_with_budget
+from .models import Alert, Asset, AuditEntry, Collector, Event, GuardrailPolicy, Finding, RemediationProposal, AgentTraceSpan, now
+from .schemas import AlertChange, AssetInput, ChatRequest, CollectorRegistration, EventInput, InspectRequest, PolicyUpdate, FindingInput, FindingResolution, RemediationRequest, RemediationDecision, AgentSpanInput
 
 
 def create_app(settings: Settings | None = None, session_factory=None) -> FastAPI:
@@ -82,7 +82,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         required = {
             "organizations", "memberships", "collectors", "assets",
             "security_events", "alerts", "guardrail_policies", "audit_entries",
-            "findings", "remediation_proposals",
+            "findings", "remediation_proposals", "ai_agent_spans",
         }
         try:
             db.execute(text("SELECT 1"))
@@ -375,6 +375,42 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                 "verified_control_count": 0,
                 "limitations": "Counts alone do not prove implementation, effectiveness, compliance or certification"}
 
+    @app.post("/v1/ai/agent-traces", status_code=201)
+    def record_agent_span(payload: AgentSpanInput, p: Principal = Depends(current_principal),
+                          db: Session = Depends(get_db)):
+        # This authenticated instrumentation API accepts metadata only. It never
+        # grants agent/tool execution privileges and records no tool arguments.
+        require_role(p, "analyst")
+        if payload.parent_span_id == payload.span_id:
+            raise HTTPException(422, "A span cannot parent itself")
+        item = AgentTraceSpan(tenant_id=p.tenant_id, trace_id=payload.trace_id,
+                              span_id=payload.span_id, parent_span_id=payload.parent_span_id,
+                              agent_ref=payload.agent_ref, phase=payload.phase,
+                              outcome=payload.outcome, elapsed_us=payload.elapsed_us,
+                              occurred_at=payload.occurred_at)
+        try:
+            with db.begin_nested():
+                db.add(item)
+                db.flush()
+        except IntegrityError:
+            raise HTTPException(409, "Agent span already recorded") from None
+        audit(db, p, "ai.agent_span_recorded", payload.span_id)
+        db.commit()
+        return {"span_id": item.span_id, "trace_id": item.trace_id, "recorded": True}
+
+    @app.get("/v1/ai/agent-traces")
+    def list_agent_spans(trace_id: UUID | None = None, p: Principal = Depends(current_principal),
+                         db: Session = Depends(get_db)):
+        require_role(p, "analyst")
+        query = select(AgentTraceSpan).where(AgentTraceSpan.tenant_id == p.tenant_id)
+        if trace_id is not None:
+            query = query.where(AgentTraceSpan.trace_id == str(trace_id))
+        spans = db.scalars(query.order_by(AgentTraceSpan.received_at.desc()).limit(100)).all()
+        return [{"trace_id": x.trace_id, "span_id": x.span_id, "parent_span_id": x.parent_span_id,
+                 "agent_ref": x.agent_ref, "phase": x.phase, "outcome": x.outcome,
+                 "elapsed_us": x.elapsed_us, "occurred_at": x.occurred_at,
+                 "received_at": x.received_at} for x in spans]
+
     @app.get("/v1/ai/policy")
     def get_policy(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
         block, redact, version = policy(db, p.tenant_id)
@@ -407,12 +443,13 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     @app.post("/v1/ai/inspect")
     def inspect(payload: InspectRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
         block, redact, version = policy(db, p.tenant_id)
-        result = inspect_text(payload.text, block_injection=block, redact_pii=redact,
+        result, elapsed_us = inspect_with_budget(payload.text, block_injection=block, redact_pii=redact,
                               action_type=payload.action_type)
         audit(db, p, "ai.inspected." + result.action.lower(), result.reason_code)
         db.commit()
         return {"decision": result.action, "reason_code": result.reason_code,
-                "effective_text": result.effective_text, "policy_version": version}
+                "effective_text": result.effective_text, "policy_version": version,
+                "guardrail_elapsed_us": elapsed_us, "guardrail_budget_us": 20_000}
 
     @app.post("/v1/ai/chat/completions")
     async def gateway(payload: ChatRequest, p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
@@ -423,7 +460,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         block, redact, version = policy(db, p.tenant_id)
         messages = []
         for m in payload.messages:
-            inspected = inspect_text(m.content, block_injection=block, redact_pii=redact)
+            inspected, _ = inspect_with_budget(m.content, block_injection=block, redact_pii=redact)
             if inspected.action == "Block":
                 audit(db, p, "ai.gateway_blocked", inspected.reason_code)
                 db.commit()

@@ -81,3 +81,14 @@ class RemediationRequest(StrictModel):
 class RemediationDecision(StrictModel):
     decision: Literal["approve", "reject"]
     note: str = Field(min_length=15, max_length=300)
+
+
+class AgentSpanInput(StrictModel):
+    trace_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    span_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    parent_span_id: str | None = Field(default=None, pattern=r"^[0-9a-f-]{36}$")
+    agent_ref: str = Field(min_length=3, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    phase: Literal["inference", "retrieval", "planning", "policy", "tool_review", "response"]
+    outcome: Literal["success", "denied", "error", "timeout"]
+    elapsed_us: int = Field(ge=0, le=60_000_000)
+    occurred_at: datetime

@@ -19,7 +19,7 @@ def main():
         with db.cursor() as cur:
             # Deterministic local integration fixture; not a production service account.
             cur.execute("CREATE ROLE onesa_api LOGIN PASSWORD 'ci-local-rls-user' NOINHERIT NOBYPASSRLS")
-            for path in ("001_initial.sql", "002_findings_and_approvals.sql"):
+            for path in ("001_initial.sql", "002_findings_and_approvals.sql", "003_ai_agent_spans.sql"):
                 cur.execute((root / "migrations" / path).read_text())
             cur.execute("GRANT CONNECT ON DATABASE onesa_security_test TO onesa_api")
             cur.execute("GRANT USAGE ON SCHEMA public TO onesa_api")

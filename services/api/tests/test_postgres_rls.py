@@ -8,7 +8,10 @@ from pathlib import Path
 from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
+from fastapi.testclient import TestClient
+from app.config import Settings
+from app.main import create_app
 from app.database import tenant_context
 from app.models import Organization, Membership, Collector, Finding
 
@@ -56,5 +59,25 @@ def test_postgres_real_force_rls():
             assert db.execute(text("SELECT subject FROM memberships")).scalars().all() == ["synthetic-b"]
             assert db.execute(text("SELECT id FROM organizations WHERE id=:id"), {"id": tenant_a}).first() is None
             db.rollback()
+    finally:
+        engine.dispose()
+
+@pytest.mark.skipif(not os.environ.get("ONESA_RLS_TEST_APP_URL"), reason="isolated PostgreSQL RLS DSN not provided")
+def test_postgres_api_readiness_uses_non_bypass_runtime_role():
+    """End-to-end readiness probes real migrated PostgreSQL under the app role."""
+    url = os.environ["ONESA_RLS_TEST_APP_URL"]
+    assert url.startswith("postgresql+") and "_test" in url
+    engine = create_engine(url)
+    settings = Settings(
+        database_url=url,
+        oidc_issuer="https://auth.onesa.eu/",
+        oidc_audience="https://security-api.onesa.eu",
+    )
+    try:
+        app = create_app(settings, sessionmaker(engine))
+        with TestClient(app) as client:
+            result = client.get("/readyz")
+            assert result.status_code == 200, result.text
+            assert result.json() == {"status": "ready"}
     finally:
         engine.dispose()

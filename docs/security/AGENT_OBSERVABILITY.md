@@ -32,3 +32,21 @@ Use exact main/PR commit and run attempt, live tenant-separated PostgreSQL RLS,
 mTLS agent enrollment, real-world guardrail latency and zero secret leakage
 to qualify. A Vercel READY build only proves the build succeeded, not runtime
 identity, backend access, live trace ingestion or endpoint protection.
+
+## Instrumented Python agent (developer preview)
+
+A bounded, asynchronous metadata-only Python sender is provided in
+`agents/python/onesa_security_tracer.py`. It cannot execute model tool calls.
+Use an enrolled collector credential and verified client TLS certificate/key
+issued for a dedicated security origin; the SDK refuses non-HTTPS targets and
+redirects, and never attaches credentials to a different origin. The backend
+collector trace route is `POST /v1/collector/ai/agent-traces`, using the same
+revocable, expiring collector authorization and production ASGI mTLS gate as
+collector inventory and event endpoints.
+
+The sender drops telemetry when the bounded queue is full instead of blocking
+the host agent. It does **not** enforce model guardrail decisions; the agent
+must separately reject denied actions and fail closed if policy cannot be checked.
+Thread/queue overhead is not a validated production SLO. Do not claim OS-wide
+EDR, automatic interception or lossless delivery; stage certification and
+host-latency benchmarks remain required.

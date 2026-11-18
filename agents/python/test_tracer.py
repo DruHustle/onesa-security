@@ -63,13 +63,13 @@ class TelemetryTests(unittest.TestCase):
     def test_validation_and_close(self):
         t=self.make()
         for kw in (
-            dict(agent_ref="bad name", phase="policy"),
-            dict(agent_ref="agent-01", phase="invalid"),
+            dict(agent_ref="bad name", phase="policy", outcome="success"),
+            dict(agent_ref="agent-01", phase="invalid", outcome="success"),
             dict(agent_ref="agent-01", phase="policy", outcome="not-ok"),
         ):
             with self.assertRaises(ValueError):
                 t.record(trace_id=str(uuid4()), span_id=str(uuid4()), elapsed_us=1,
-                         outcome="success", **kw)
+                         **kw)
         t.close()
         self.assertFalse(t.record(trace_id=str(uuid4()), span_id=str(uuid4()), agent_ref="agent-01",
                                   phase="policy", outcome="success", elapsed_us=1))

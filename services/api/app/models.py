@@ -111,3 +111,51 @@ class AuditEntry(Base):
     target_ref: Mapped[str] = mapped_column(String(150), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (ForeignKeyConstraint(["tenant_id"], ["organizations.id"]),)
+
+
+class Finding(Base):
+    """Collector-reported exposure; not proof of exploitation or certification."""
+    __tablename__ = "findings"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    collector_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    asset_ref: Mapped[str] = mapped_column(String(150), nullable=False)
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    cve_id: Mapped[str | None] = mapped_column(String(24))
+    evidence_ref: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="reported")
+    resolution_note: Mapped[str | None] = mapped_column(String(300))
+    verified_by: Mapped[str | None] = mapped_column(String(255))
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "collector_id"], ["collectors.tenant_id", "collectors.id"]),
+        UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "collector_id", "external_id"),
+        Index("finding_queue", "tenant_id", "status", "severity", "last_seen"),
+    )
+
+
+class RemediationProposal(Base):
+    """Two-person approved *proposal* only; it has no command dispatcher."""
+    __tablename__ = "remediation_proposals"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    finding_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    action_summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    impact_summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    rollback_plan: Mapped[str] = mapped_column(String(500), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_by: Mapped[str | None] = mapped_column(String(255))
+    decision_note: Mapped[str | None] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "finding_id"], ["findings.tenant_id", "findings.id"]),
+        Index("remediation_queue", "tenant_id", "status", "created_at"),
+    )

@@ -44,10 +44,40 @@ class InspectRequest(StrictModel):
 
 
 class ChatMessage(StrictModel):
-    role: Literal["user", "assistant", "system"]
+    role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=20000)
 
 
 class ChatRequest(StrictModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=30)
     stream: bool = False
+
+
+class FindingInput(StrictModel):
+    external_id: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    asset_ref: str = Field(min_length=4, max_length=150, pattern=r"^[A-Za-z0-9_.:-]+$")
+    title: str = Field(min_length=5, max_length=150)
+    category: Literal["configuration", "software", "exposure", "identity"]
+    severity: Literal["low", "medium", "high", "critical"]
+    cve_id: str | None = Field(default=None, pattern=r"^CVE-[0-9]{4}-[0-9]{4,10}$", max_length=24)
+    evidence_ref: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+
+class FindingResolution(StrictModel):
+    verification: Literal["verified_resolved", "false_positive", "accepted_risk"]
+    evidence_ref: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    note: str = Field(min_length=15, max_length=300)
+
+
+class RemediationRequest(StrictModel):
+    finding_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    action_type: Literal["patch_plan", "configuration_hardening", "credential_rotation", "firewall_review"]
+    action_summary: str = Field(min_length=15, max_length=500)
+    impact_summary: str = Field(min_length=15, max_length=500)
+    rollback_plan: str = Field(min_length=15, max_length=500)
+    dry_run: Literal[True]
+
+
+class RemediationDecision(StrictModel):
+    decision: Literal["approve", "reject"]
+    note: str = Field(min_length=15, max_length=300)

@@ -17,3 +17,14 @@
 ## CI receipt
 
 Initial draft PR #1, run [44291034754](https://github.com/DruHustle/onesa-security/actions/runs/44291034754) reported failure on all three jobs, with no listed job steps and logs unavailable through the connected API. This provides **no evidence that source tests executed in GitHub Actions**, and no defensible attribution to specific code failures. Inspect repository Actions permissions, runner capacity/billing and GitHub's workflow annotations before retrying. Do not change branch protection or suppress scanner failures to get a green badge.
+
+## Additional reviewed-scope candidate (same date, not production evidence)
+
+- **Finding lifecycle:** enrolled collectors can submit asset-scoped, evidence-referenced findings. Operators can classify false positives and risks; collector recurrence reopens a reviewed finding. A collector report is **not** proof of exploitation. RLS migration 002 enforces tenant context on findings and proposals.
+- **Security upgrades:** analysts may author impact/rollback proposals. A separate organization owner must approve or reject; there is **no execution dispatcher**, even on approval. Production change control, patch deployment, rollback and impact tests are still NOT IMPLEMENTED.
+- **Compliance:** source counts are explicitly labeled partial engineering evidence, with zero verified framework controls; no claims of certification or legal compliance.
+- **Operating system:** optional Linux read-only SSH configuration hints cannot prove effective sshd posture; no signed service package, privileged telemetry or mTLS enrollment is supplied.
+- **Real PostgreSQL:** a disposable GitHub Actions test role and schema setup have been added, but this does not constitute a passed test until an actual hosted runner executes the full suite and RLS negative tests.
+- **AI:** untrusted callers cannot submit upstream `system`-role messages. This does not qualify protection against all injection attacks.
+
+The scope increase does not change overall production **NO-GO**. The live web build is Vercel-team protected; missing Auth0 client and backend credentials prevent authenticated workflow verification. No customer domain or API origin was activated.

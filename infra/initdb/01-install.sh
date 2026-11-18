@@ -6,6 +6,7 @@ psql -v ON_ERROR_STOP=1 -U postgres -d "$POSTGRES_DB" -v passwd="$APP_DB_PASSWOR
 SELECT format('CREATE ROLE onesa_api LOGIN PASSWORD %L NOINHERIT NOBYPASSRLS', :'passwd') \gexec
 SQL
 psql -v ON_ERROR_STOP=1 -U postgres -d "$POSTGRES_DB" -f /schema/001_initial.sql
+psql -v ON_ERROR_STOP=1 -U postgres -d "$POSTGRES_DB" -f /schema/002_findings_and_approvals.sql
 psql -v ON_ERROR_STOP=1 -U postgres -d "$POSTGRES_DB" <<'SQL'
 GRANT CONNECT ON DATABASE onesa_security TO onesa_api;
 GRANT USAGE ON SCHEMA public TO onesa_api;

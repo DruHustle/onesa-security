@@ -25,6 +25,7 @@ def harness(tmp_path, monkeypatch):
             Membership(tenant_id=org_a, subject="owner-A", role="owner"),
             Membership(tenant_id=org_a, subject="viewer-A", role="viewer"),
             Membership(tenant_id=org_a, subject="analyst-A", role="analyst"),
+            Membership(tenant_id=org_a, subject="owner-A2", role="owner"),
             Membership(tenant_id=org_b, subject="owner-B", role="owner"),
         ])
     # In integration tests only, replace signed OIDC verification with known subjects;

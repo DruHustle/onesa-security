@@ -2,7 +2,7 @@ import {auth0} from "../lib/auth0";
 import {securityApi} from "../lib/server-api";
 import {Shell, SectionHeader, Warning, EmptyState} from "../components/Shell";
 
-interface Summary {organization_id: string; role: string; assets: number; events: number; alerts: number; collectors: number; real_data: boolean; source: string}
+interface Summary {organization_id: string; role: string; assets: number; events: number; alerts: number; collectors: number; findings: number; remediation_proposals: number; real_data: boolean; source: string}
 
 export default async function Overview() {
   const session = await auth0.getSession();
@@ -13,6 +13,8 @@ export default async function Overview() {
     {name: "Security events", value: response.data.events, text: "Persisted normalized events"},
     {name: "Detection alerts", value: response.data.alerts, text: "Explainable rule-based findings"},
     {name: "Collectors", value: response.data.collectors, text: "Registered collection identities"},
+    {name: "Reported findings", value: response.data.findings, text: "Not confirmed exploitation"},
+    {name: "Remediation proposals", value: response.data.remediation_proposals, text: "Planning and approvals; execution disabled"},
   ] : [];
   return <Shell active="" name={session.user.name}><SectionHeader kicker="SECURITY OVERVIEW / FOUNDATION" title="Security command center" description="Organization-scoped defensive operations backed by authorized sources. No synthetic findings or fabricated threat scores."/>
     <div className="header-trailing"><span className="data-chip"><span className="status-dot"/> Live database view</span><span>Role: {response.ok ? response.data.role : "unverified"}</span></div>

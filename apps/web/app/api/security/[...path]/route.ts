@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "../../../../lib/auth0";
 import { securityApi } from "../../../../lib/server-api";
 
-const readable = new Set(["overview", "assets", "events", "alerts", "ai/policy", "audit"]);
+const readable = new Set(["overview", "assets", "events", "alerts", "findings", "remediation-proposals", "compliance/readiness", "ai/policy", "audit"]);
 const uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
 type RouteContext = {params: Promise<{path: string[]}>};
@@ -22,6 +22,9 @@ async function handleRequest(req: NextRequest, context: RouteContext) {
     }
     if (method === "POST" && relative === "ai/inspect") { /* allowed */ }
     else if (method === "PATCH" && new RegExp(`^alerts/${uuid}$`).test(relative)) { /* allowed */ }
+    else if (method === "POST" && relative === "remediation-proposals") { /* allowed */ }
+    else if (method === "POST" && new RegExp(`^remediation-proposals/${uuid}/decision$`).test(relative)) { /* allowed */ }
+    else if (method === "POST" && new RegExp(`^findings/${uuid}/resolve$`).test(relative)) { /* allowed */ }
     else return NextResponse.json({error: "Not found"}, {status: 404});
   }
   let body: string | undefined;

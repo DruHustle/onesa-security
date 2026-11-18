@@ -16,8 +16,8 @@ from .config import Settings
 from .database import db_factory
 from .detection import evaluate_event
 from .guardrails import inspect_text, sanitize_model_output
-from .models import Alert, Asset, AuditEntry, Collector, Event, GuardrailPolicy, now
-from .schemas import AlertChange, AssetInput, ChatRequest, CollectorRegistration, EventInput, InspectRequest, PolicyUpdate
+from .models import Alert, Asset, AuditEntry, Collector, Event, GuardrailPolicy, Finding, RemediationProposal, now
+from .schemas import AlertChange, AssetInput, ChatRequest, CollectorRegistration, EventInput, InspectRequest, PolicyUpdate, FindingInput, FindingResolution, RemediationRequest, RemediationDecision
 
 
 def create_app(settings: Settings | None = None, session_factory=None) -> FastAPI:
@@ -78,7 +78,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             return db.scalar(select(func.count()).select_from(model).where(model.tenant_id == p.tenant_id))
         return {"organization_id": p.tenant_id, "role": p.role, "real_data": True,
                 "assets": count(Asset), "events": count(Event), "alerts": count(Alert),
-                "collectors": count(Collector), "source": "Authorized Onesa Security collectors only"}
+                "collectors": count(Collector), "findings": count(Finding), "remediation_proposals": count(RemediationProposal), "source": "Authorized Onesa Security collectors only"}
 
     @app.get("/v1/assets")
     def assets(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
@@ -178,6 +178,132 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         a = evaluate_event(db, event)
         db.commit()
         return {"event_id": event.id, "created": True, "alert_id": a.id if a else None}
+
+
+    @app.get("/v1/findings")
+    def list_findings(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+        rows = db.scalars(select(Finding).where(Finding.tenant_id == p.tenant_id)
+                          .order_by(Finding.last_seen.desc()).limit(100)).all()
+        return [{"id": f.id, "title": f.title, "category": f.category, "severity": f.severity,
+                 "asset_ref": f.asset_ref, "cve_id": f.cve_id, "status": f.status,
+                 "evidence_ref": f.evidence_ref, "source": "collector-reported; not verified exploitation",
+                 "first_seen": f.first_seen, "last_seen": f.last_seen, "verified_by": f.verified_by}
+                for f in rows]
+
+    @app.post("/v1/collector/findings")
+    def ingest_finding(payload: FindingInput, c: Collector = Depends(collector_principal), db: Session = Depends(get_db)):
+        asset = db.scalar(select(Asset).where(Asset.tenant_id == c.tenant_id,
+                            Asset.collector_id == c.id, Asset.external_ref == payload.asset_ref))
+        if asset is None:
+            raise HTTPException(422, "Finding must reference a reported asset for this collector")
+        existing = db.scalar(select(Finding).where(Finding.tenant_id == c.tenant_id,
+                              Finding.collector_id == c.id, Finding.external_id == payload.external_id))
+        if existing is None:
+            existing = Finding(tenant_id=c.tenant_id, collector_id=c.id, external_id=payload.external_id,
+                               asset_ref=payload.asset_ref, title=payload.title, category=payload.category,
+                               severity=payload.severity, cve_id=payload.cve_id, evidence_ref=payload.evidence_ref)
+            db.add(existing)
+            created = True
+        else:
+            # An observed recurrence reopens a verified finding; do not silently preserve a closed status.
+            existing.asset_ref, existing.title, existing.category = payload.asset_ref, payload.title, payload.category
+            existing.severity, existing.cve_id, existing.evidence_ref = payload.severity, payload.cve_id, payload.evidence_ref
+            existing.status, existing.verified_by, existing.resolution_note = "reported", None, None
+            existing.last_seen = now()
+            created = False
+        db.flush()
+        result_id = existing.id
+        db.commit()
+        return {"id": result_id, "created": created, "status": "reported",
+                "warning": "Collector observation is not confirmed exploitation or verified remediation"}
+
+    @app.post("/v1/findings/{finding_id}/resolve")
+    def resolve_finding(finding_id: UUID, payload: FindingResolution,
+                        p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+        require_role(p, "analyst")
+        finding = db.scalar(select(Finding).where(Finding.tenant_id == p.tenant_id,
+                                                 Finding.id == str(finding_id)))
+        if finding is None:
+            raise HTTPException(404, "Finding not found")
+        finding.status = payload.verification
+        finding.evidence_ref = payload.evidence_ref
+        finding.resolution_note = payload.note
+        finding.verified_by = p.subject
+        audit(db, p, "finding.verified_" + payload.verification, finding.id)
+        db.commit()
+        return {"id": finding.id, "status": finding.status, "verified_by": p.subject}
+
+    @app.get("/v1/remediation-proposals")
+    def list_proposals(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+        rows = db.scalars(select(RemediationProposal).where(RemediationProposal.tenant_id == p.tenant_id)
+                          .order_by(RemediationProposal.created_at.desc()).limit(100)).all()
+        return [{"id": r.id, "finding_id": r.finding_id, "action_type": r.action_type,
+                 "action_summary": r.action_summary, "impact_summary": r.impact_summary,
+                 "rollback_plan": r.rollback_plan, "requested_by": r.requested_by,
+                 "approved_by": r.approved_by, "decision_note": r.decision_note,
+                 "status": r.status, "execution_supported": False, "created_at": r.created_at}
+                for r in rows]
+
+    @app.post("/v1/remediation-proposals")
+    def create_proposal(payload: RemediationRequest, p: Principal = Depends(current_principal),
+                        db: Session = Depends(get_db)):
+        require_role(p, "analyst")
+        try:
+            finding_id = str(UUID(payload.finding_id))
+        except ValueError:
+            raise HTTPException(422, "Invalid finding identifier") from None
+        finding = db.scalar(select(Finding).where(Finding.id == finding_id, Finding.tenant_id == p.tenant_id))
+        if finding is None:
+            raise HTTPException(404, "Finding not found")
+        item = RemediationProposal(tenant_id=p.tenant_id, finding_id=finding_id,
+                                   action_type=payload.action_type, action_summary=payload.action_summary,
+                                   impact_summary=payload.impact_summary, rollback_plan=payload.rollback_plan,
+                                   requested_by=p.subject)
+        db.add(item)
+        db.flush()
+        item_id = item.id
+        audit(db, p, "remediation.proposed", item_id)
+        db.commit()
+        return {"id": item_id, "status": "pending", "execution_supported": False}
+
+    @app.post("/v1/remediation-proposals/{proposal_id}/decision")
+    def decide_proposal(proposal_id: UUID, payload: RemediationDecision,
+                        p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+        require_role(p, "owner")
+        item = db.scalar(select(RemediationProposal).where(RemediationProposal.id == str(proposal_id),
+                                                           RemediationProposal.tenant_id == p.tenant_id))
+        if item is None:
+            raise HTTPException(404, "Proposal not found")
+        if item.status != "pending":
+            raise HTTPException(409, "Proposal has already been decided")
+        if item.requested_by == p.subject:
+            raise HTTPException(403, "A separate owner must review this proposal")
+        status = "approved" if payload.decision == "approve" else "rejected"
+        changed = db.execute(update(RemediationProposal).where(
+            RemediationProposal.id == item.id, RemediationProposal.tenant_id == p.tenant_id,
+            RemediationProposal.status == "pending"
+        ).values(status=status, approved_by=p.subject, decision_note=payload.note, decided_at=now()))
+        if changed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(409, "Concurrent proposal decision")
+        audit(db, p, "remediation." + status, item.id)
+        db.commit()
+        return {"id": item.id, "status": status,
+                "execution_supported": False, "detail": "No execution or deployment is triggered"}
+
+    @app.get("/v1/compliance/readiness")
+    def compliance_readiness(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):
+        # Evidence-based engineering posture, not a legal or independent certification verdict.
+        assets = db.scalar(select(func.count()).select_from(Asset).where(Asset.tenant_id == p.tenant_id))
+        events = db.scalar(select(func.count()).select_from(Event).where(Event.tenant_id == p.tenant_id))
+        findings = db.scalar(select(func.count()).select_from(Finding).where(Finding.tenant_id == p.tenant_id))
+        proposals = db.scalar(select(func.count()).select_from(RemediationProposal).where(RemediationProposal.tenant_id == p.tenant_id))
+        return {"classification": "partial technical evidence; NOT compliance/certification",
+                "frameworks": ["NIST CSF 2.0", "ISO/IEC 27001", "CIS Controls"],
+                "evidence": {"assets_reported": assets, "events_recorded": events,
+                             "findings_reported": findings, "human_review_plans": proposals},
+                "verified_control_count": 0,
+                "limitations": "Counts alone do not prove implementation, effectiveness, compliance or certification"}
 
     @app.get("/v1/ai/policy")
     def get_policy(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):

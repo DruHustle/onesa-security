@@ -56,16 +56,6 @@ def send(api_base, credential_file, ca_file, ssh_posture=False):
     print("Host inventory snapshot accepted (no credential output)")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--api", required=True, help="HTTPS API origin")
-    parser.add_argument("--credential-file", required=True)
-    parser.add_argument("--ca-file", default=None)
-    parser.add_argument("--read-only-ssh-posture", action="store_true", help="Report literal SSH config hints; verify effective sshd -T independently")
-    args = parser.parse_args()
-    send(args.api.rstrip("/"), args.credential_file, args.ca_file, args.read_only_ssh_posture)
-
-
 def inspect_sshd_baseline(sshd_config_path="/etc/ssh/sshd_config"):
     """Read-only configuration-file hint, NOT a claim of effective SSH daemon posture.
 
@@ -99,3 +89,13 @@ def inspect_sshd_baseline(sshd_config_path="/etc/ssh/sshd_config"):
                          "title": title, "evidence_ref": "read-only-file-" + digest,
                          "limitations": "Declared configuration may be overridden; inspect effective sshd -T before remediation"})
     return reported
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--api", required=True, help="HTTPS API origin")
+    parser.add_argument("--credential-file", required=True)
+    parser.add_argument("--ca-file", default=None)
+    parser.add_argument("--read-only-ssh-posture", action="store_true", help="Report literal SSH config hints; verify effective sshd -T independently")
+    args = parser.parse_args()
+    send(args.api.rstrip("/"), args.credential_file, args.ca_file, args.read_only_ssh_posture)

@@ -28,3 +28,17 @@ Initial draft PR #1, run [44291034754](https://github.com/DruHustle/onesa-securi
 - **AI:** untrusted callers cannot submit upstream `system`-role messages. This does not qualify protection against all injection attacks.
 
 The scope increase does not change overall production **NO-GO**. The live web build is Vercel-team protected; missing Auth0 client and backend credentials prevent authenticated workflow verification. No customer domain or API origin was activated.
+
+## Infrastructure configuration and verification update — 2026-11-18
+
+This update supersedes the earlier **infrastructure-status** statements in this document; it does not change the product's production **NO-GO** decision.
+
+- **Frontend domain:** `security.onesa.eu` is an owned, verified Vercel project domain. Cloudflare has a DNS-only CNAME to Vercel's returned target. Vercel reports DNS correctly configured and HTTPS/TLS validation passed in an independent HTTP probe.
+- **Protected deployment:** the Vercel production-target frontend build on reviewed main `5eb37ec5` passed and serves the protected custom domain. Anonymous `/`, `/api/healthz`, `/api/readyz`, and `/auth/login` requests return HTTP 302 to Vercel Authentication; this establishes **access-gate presence**, not application readiness.
+- **Vercel environment:** reviewed non-secret `AUTH0_DOMAIN=auth.onesa.eu` and `OIDC_AUDIENCE=https://security-api.onesa.eu` are configured for production/preview; `APP_BASE_URL=https://security.onesa.eu` is production-only. Independent 32-byte cryptographically generated `AUTH0_SECRET` values were stored as **sensitive**, scoped separately to production/preview. These secret additions require a new build to become active.
+- **Identity incomplete:** no dedicated Security `AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` are configured. No authenticated Onesa Security login, registered callback, product grant or tenant-membership acceptance has been performed. A session secret is not a substitute for an OAuth client credential.
+- **API incomplete:** `security-api.onesa.eu` has no DNS record or commissioned Oracle service behind it. No `ONESA_API_ORIGIN` or tenant identifier is configured in Vercel. Do not fabricate or copy these values from another product; actual deployment, RLS and enrollment need operator evidence.
+- **CI evidence:** [main run 44394014307](https://github.com/DruHustle/onesa-security/actions/runs/44394014307) passed all three jobs; 38 tests on the API job, real disposable PostgreSQL with FORCE RLS, a restricted Dockerized API smoke test, seven live Next.js fail-closed checks and synthetic p99 guardrail 46 µs. No production provider, operating-system EDR or load claim follows from these results.
+- **Current deployment limitation:** a direct follow-up Vercel API deployment request returned HTTP 402 `api-deployments-free-per-day`; do not upgrade or charge the team without explicit approval. Normal Git-integrated deployments continue to be the approved branch-based release path.
+
+The existing Onesa Identity repository recognizes the `security` product and its web registration return, but a user grant alone does not create an Onesa Security tenant membership. Complete dedicated application registration, strict membership mapping, API/DB/mTLS deployment and authenticated browser tests before assigning customer GO.

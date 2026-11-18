@@ -33,8 +33,7 @@ have been accepted by an authorized operator.
 - The Vercel frontend must be linked to the reviewed GitHub revision,
   protected with Vercel Authentication during qualification, and have a
   distinct confidential Auth0 application configured in protected Vercel
-  environment variables. DNS `security.onesa.eu` may be assigned only
-  after the app and backend end-to-end checks have passed.
+  environment variables. DNS `security.onesa.eu` is already assigned to the **Vercel Authentication-protected** frontend. This is a restricted engineering deployment, not a customer release. Do not disable Vercel Authentication, publish `security-api.onesa.eu` or connect a customer before the API/identity end-to-end gates pass.
 
 If any gate fails, keep customer ingress and payment/telemetry ingestion off.
 No command in this runbook rotates credentials, modifies machines or provisions

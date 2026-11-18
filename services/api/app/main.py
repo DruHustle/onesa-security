@@ -171,14 +171,29 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
 
     @app.post("/v1/collector/assets")
     def ingest_asset(payload: AssetInput, c: Collector = Depends(collector_principal), db: Session = Depends(get_db)):
-        item = db.scalar(select(Asset).where(Asset.tenant_id == c.tenant_id, Asset.collector_id == c.id,
-                                              Asset.external_ref == payload.external_ref))
+        # Savepoints preserve the tenant-scoped transaction after a competing
+        # collector request wins the unique (tenant, collector, external_ref) insert.
+        key = (Asset.tenant_id == c.tenant_id, Asset.collector_id == c.id,
+               Asset.external_ref == payload.external_ref)
+        item = db.scalar(select(Asset).where(*key))
         if item is None:
-            item = Asset(tenant_id=c.tenant_id, collector_id=c.id, external_ref=payload.external_ref,
-                         category=payload.category, label=payload.label, os_family=payload.os_family)
-            db.add(item)
+            try:
+                with db.begin_nested():
+                    item = Asset(tenant_id=c.tenant_id, collector_id=c.id, external_ref=payload.external_ref,
+                                 category=payload.category, label=payload.label, os_family=payload.os_family)
+                    db.add(item)
+                    db.flush()
+            except IntegrityError:
+                item = db.scalar(select(Asset).where(*key))
+                if item is None:
+                    raise HTTPException(409, "Asset registration conflict") from None
+                item.label, item.os_family, item.category, item.last_seen = (
+                    payload.label, payload.os_family, payload.category, now()
+                )
         else:
-            item.label, item.os_family, item.category, item.last_seen = payload.label, payload.os_family, payload.category, now()
+            item.label, item.os_family, item.category, item.last_seen = (
+                payload.label, payload.os_family, payload.category, now()
+            )
         db.commit()
         return {"asset_id": item.id, "recorded": True}
 
@@ -190,15 +205,25 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         occurred = occurred.astimezone(timezone.utc)
         if occurred > now() + timedelta(minutes=5):
             raise HTTPException(422, "Event timestamp is in the future")
-        existing = db.scalar(select(Event).where(Event.tenant_id == c.tenant_id, Event.collector_id == c.id,
-                                                 Event.external_id == payload.external_id))
+        key = (Event.tenant_id == c.tenant_id, Event.collector_id == c.id,
+               Event.external_id == payload.external_id)
+        existing = db.scalar(select(Event).where(*key))
         if existing:
             return {"event_id": existing.id, "created": False, "alert_id": None}
         event = Event(tenant_id=c.tenant_id, collector_id=c.id, external_id=payload.external_id,
                       event_type=payload.event_type, subject_ref=payload.subject_ref,
                       asset_ref=payload.asset_ref, occurred_at=occurred)
-        db.add(event)
-        db.flush()
+        try:
+            with db.begin_nested():
+                db.add(event)
+                db.flush()
+        except IntegrityError:
+            # A simultaneous retry can insert the exact same external event
+            # between SELECT and INSERT. Never emit a 500 or duplicate alert.
+            existing = db.scalar(select(Event).where(*key))
+            if existing is None:
+                raise HTTPException(409, "Event registration conflict") from None
+            return {"event_id": existing.id, "created": False, "alert_id": None}
         a = evaluate_event(db, event)
         db.commit()
         return {"event_id": event.id, "created": True, "alert_id": a.id if a else None}
@@ -220,21 +245,30 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                             Asset.collector_id == c.id, Asset.external_ref == payload.asset_ref))
         if asset is None:
             raise HTTPException(422, "Finding must reference a reported asset for this collector")
-        existing = db.scalar(select(Finding).where(Finding.tenant_id == c.tenant_id,
-                              Finding.collector_id == c.id, Finding.external_id == payload.external_id))
-        if existing is None:
-            existing = Finding(tenant_id=c.tenant_id, collector_id=c.id, external_id=payload.external_id,
-                               asset_ref=payload.asset_ref, title=payload.title, category=payload.category,
-                               severity=payload.severity, cve_id=payload.cve_id, evidence_ref=payload.evidence_ref)
-            db.add(existing)
-            created = True
-        else:
-            # An observed recurrence reopens a verified finding; do not silently preserve a closed status.
+        key = (Finding.tenant_id == c.tenant_id, Finding.collector_id == c.id,
+               Finding.external_id == payload.external_id)
+        existing = db.scalar(select(Finding).where(*key))
+        created = existing is None
+        if created:
+            try:
+                with db.begin_nested():
+                    existing = Finding(tenant_id=c.tenant_id, collector_id=c.id, external_id=payload.external_id,
+                                       asset_ref=payload.asset_ref, title=payload.title, category=payload.category,
+                                       severity=payload.severity, cve_id=payload.cve_id, evidence_ref=payload.evidence_ref)
+                    db.add(existing)
+                    db.flush()
+            except IntegrityError:
+                existing = db.scalar(select(Finding).where(*key))
+                if existing is None:
+                    raise HTTPException(409, "Finding registration conflict") from None
+                created = False
+        if not created:
+            # A concurrent report or later recurrence must keep the latest
+            # evidence and reopen findings previously marked reviewed.
             existing.asset_ref, existing.title, existing.category = payload.asset_ref, payload.title, payload.category
             existing.severity, existing.cve_id, existing.evidence_ref = payload.severity, payload.cve_id, payload.evidence_ref
             existing.status, existing.verified_by, existing.resolution_note = "reported", None, None
             existing.last_seen = now()
-            created = False
         db.flush()
         result_id = existing.id
         db.commit()

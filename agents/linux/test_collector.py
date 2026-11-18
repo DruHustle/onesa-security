@@ -41,5 +41,21 @@ class CollectorTests(unittest.TestCase):
 
 
 
+    def test_refuses_unsafe_collector_origins_before_loading_credentials(self):
+        untrusted = [
+            "http://security.example.invalid",
+            "https://user@security.example.invalid",
+            "https://user:pass@security.example.invalid",
+            "https://security.example.invalid/?debug=1",
+            "https://security.example.invalid/#fragment",
+            "https://security.example.invalid/other",
+        ]
+        for origin in untrusted:
+            with self.subTest(origin=origin), patch("collector.urlopen") as network:
+                with self.assertRaises(ValueError):
+                    collector.send(origin, "no-such-credential-file", None)
+                network.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

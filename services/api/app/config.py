@@ -36,6 +36,16 @@ class Settings:
                 raise RuntimeError("IP-literal AI upstreams are refused; use reviewed provider hostnames")
             except ValueError:
                 pass
+        mtls_value = environ.get("COLLECTOR_REQUIRE_MTLS", "true").strip().lower()
+        if mtls_value not in {"true", "false"}:
+            raise RuntimeError("COLLECTOR_REQUIRE_MTLS must be true or false")
+        if mtls_value == "false" and not (
+            environ.get("ONESA_SECURITY_ENV") == "development"
+            and environ.get("ONESA_DEV_ISOLATED") == "1"
+        ):
+            # A mistyped or inherited public deployment configuration must
+            # never silently disable the independent collector certificate gate.
+            raise RuntimeError("Collector mTLS can only be disabled for explicitly isolated development")
         return cls(
             database_url=environ.get("DATABASE_URL", ""),
             oidc_issuer=issuer if issuer.endswith("/") else issuer + "/",
@@ -43,5 +53,5 @@ class Settings:
             upstream_url=upstream,
             upstream_key=environ.get("AI_UPSTREAM_API_KEY") or None,
             upstream_model=environ.get("AI_UPSTREAM_MODEL") or None,
-            collector_mtls_required=environ.get("COLLECTOR_REQUIRE_MTLS", "true").lower() != "false",
+            collector_mtls_required=mtls_value == "true",
         )

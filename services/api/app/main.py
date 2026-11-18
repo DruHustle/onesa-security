@@ -7,7 +7,7 @@ from uuid import UUID
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -65,12 +65,36 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
 
     @app.get("/readyz")
     def ready(db: Session = Depends(get_db)):
-        from sqlalchemy import text
+        # A successful SELECT 1 is only connectivity. Never advertise readiness
+        # before *all* migrations and the PostgreSQL tenant isolation gates exist.
+        required = {
+            "organizations", "memberships", "collectors", "assets",
+            "security_events", "alerts", "guardrail_policies", "audit_entries",
+            "findings", "remediation_proposals",
+        }
         try:
             db.execute(text("SELECT 1"))
+            if not required.issubset(set(inspect(db.get_bind()).get_table_names())):
+                raise RuntimeError("Security schema migrations are incomplete")
+            if db.get_bind().dialect.name == "postgresql":
+                role = db.execute(text(
+                    "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"
+                )).one()
+                if role[0] or role[1]:
+                    raise RuntimeError("Runtime database role can bypass tenant isolation")
+                rows = db.execute(text(
+                    "SELECT relname, relrowsecurity, relforcerowsecurity "
+                    "FROM pg_catalog.pg_class "
+                    "WHERE relnamespace = current_schema()::regnamespace "
+                    "AND relname = ANY(:required)"
+                ), {"required": sorted(required)}).all()
+                if {row[0] for row in rows} != required or any(
+                    not row[1] or not row[2] for row in rows
+                ):
+                    raise RuntimeError("PostgreSQL FORCE RLS is missing")
             return {"status": "ready"}
         except Exception:
-            raise HTTPException(503, "Database unavailable") from None
+            raise HTTPException(503, "Database or tenant-isolated schema unavailable") from None
 
     @app.get("/v1/overview")
     def overview(p: Principal = Depends(current_principal), db: Session = Depends(get_db)):

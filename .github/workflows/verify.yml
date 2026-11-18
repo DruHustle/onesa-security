@@ -46,6 +46,9 @@ jobs:
       - name: Check Linux collector fixture
         working-directory: agents/linux
         run: python -m unittest -q test_collector.py test_posture.py
+      - name: Check nonblocking AI agent telemetry SDK
+        working-directory: agents/python
+        run: python -m unittest discover -s . -p 'test_*.py' -q
       - name: Build production-structured API container image
         run: docker build --file services/api/Dockerfile --tag onesa-security-api:ci services/api
       - name: Smoke test non-root read-only API container with actual PostgreSQL
@@ -107,6 +110,6 @@ jobs:
           python - <<'PYCODE'
           import json
           d=json.load(open('/tmp/onesa-secret-findings.json'))
-          findings=[(path,len(items)) for path,items in d.get('results',{}).items() if items]
+          findings=[(path, [(x.get('line_number'),x.get('type')) for x in items]) for path,items in d.get('results',{}).items() if items]
           if findings: raise SystemExit(f'Secret candidates require review: {findings}')
           PYCODE

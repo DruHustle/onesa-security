@@ -398,6 +398,30 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         db.commit()
         return {"span_id": item.span_id, "trace_id": item.trace_id, "recorded": True}
 
+    @app.post("/v1/collector/ai/agent-traces", status_code=201)
+    def record_collector_agent_span(payload: AgentSpanInput,
+                                    c: Collector = Depends(collector_principal),
+                                    db: Session = Depends(get_db)):
+        # Machine instrumentation reuses collector enrollment, revocation and
+        # production mTLS checks. Never accept a caller-provided tenant ID.
+        if payload.parent_span_id == payload.span_id:
+            raise HTTPException(422, "A span cannot parent itself")
+        item = AgentTraceSpan(tenant_id=c.tenant_id, trace_id=payload.trace_id,
+                              span_id=payload.span_id, parent_span_id=payload.parent_span_id,
+                              agent_ref=payload.agent_ref, phase=payload.phase,
+                              outcome=payload.outcome, elapsed_us=payload.elapsed_us,
+                              occurred_at=payload.occurred_at)
+        try:
+            with db.begin_nested():
+                db.add(item)
+                db.flush()
+        except IntegrityError:
+            raise HTTPException(409, "Agent span already recorded") from None
+        audit(db, Principal(c.tenant_id, "collector:" + c.id, "viewer"),
+              "ai.collector_span_recorded", payload.span_id)
+        db.commit()
+        return {"span_id": item.span_id, "trace_id": item.trace_id, "recorded": True}
+
     @app.get("/v1/ai/agent-traces")
     def list_agent_spans(trace_id: UUID | None = None, p: Principal = Depends(current_principal),
                          db: Session = Depends(get_db)):

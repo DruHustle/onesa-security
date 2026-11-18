@@ -31,4 +31,4 @@ Browse `http://localhost:3000` and sign in with the registered Onesa Auth0 devel
 
 ## Operational caution
 
-Never run `docker compose down -v` against a non-disposable database; it destroys volumes. Perform staging Postgres RLS, identity, mTLS and browser checks with approved private credentials before considering deployment. The `apps/web` dependency lockfile was not generated in the offline authoring environment; until a reviewed lock and clean hosted build exist, the browser is not release-qualified. Docker network egress is needed to install dependencies and contact the dedicated OIDC provider.
+Never run `docker compose down -v` against a non-disposable database; it destroys volumes. Perform staging Postgres RLS, identity, mTLS and browser checks with approved private credentials before considering deployment. The web dependency lockfile is committed, and the source build runs in CI. This does not qualify the deployed site; verify browser authentication, backend access and collected data against the exact deployed revision. Docker network egress is needed to install dependencies and contact the dedicated OIDC provider.

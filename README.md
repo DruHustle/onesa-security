@@ -52,14 +52,14 @@ A local Docker Compose stack is in [`compose.dev.yaml`](compose.dev.yaml); it re
 - `services/api/tests/`: offline authorization/detection/guardrail integration tests
 - `apps/web/`: Next.js 16 App Router + Auth0 SDK v4 server-side token BFF
 - `agents/linux/`: read-only preview; not a native endpoint product
-- `.github/workflows/verify.yml`: preliminary CI; lockfile, security scans, hosted browser and performance qualification still required
+- `.github/workflows/verify.yml`: preliminary CI; lockfile and source CI are present; authenticated browser and performance qualification remain required
 - `docs/security/THREAT_MODEL.md`: trusted boundaries and current security gaps
 - `docs/security/RELEASE_DECISION.md`: evidence-based per-module NO-GO
 - `AGENTS.md`: integration, authoring and security invariants
 
 ## Release contract
 
-The overall release is **NO-GO** for customer production. An API unit test result is not an endpoint integration acceptance, and a successful UI build is not security approval. Local regression run: **10 API tests passed, 1 Linux unit test passed**. The first GitHub Actions PR run reported failure for every job before any job steps appeared, and downloadable logs were unavailable; the hosted verification result is therefore not qualified.
+The overall release is **NO-GO** for customer production. An API unit test result is not an endpoint integration acceptance, and a successful UI build is not security approval. Local regression run: **10 API tests passed, 1 Linux unit test passed**. The initial GitHub Actions PR run failed before any job executed, but later source CI passed for main at `4bf5fe3` (run `44389541981`). This source-only success is not hosted identity, backend, or customer-production qualification.
 
 The remaining hard gates include dedicated Auth0 audience and browser callback, actual PostgreSQL RLS test against the least-privilege role, enforced client mTLS and secure enrollment, complete OWASP-style AI security evaluation, real OS-specific agent tests, audit immutability and recovery, throughput/latency benchmarks, hosted UI qualification and dependency locks/CI review.
 

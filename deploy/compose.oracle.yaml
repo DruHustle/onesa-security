@@ -1,0 +1,28 @@
+# Production deployment TEMPLATE for reviewed Onesa Oracle host.
+# Does not provision DB, TLS ingress, credentials or sign-in; use only after
+# schema/RLS, signed-image, mTLS ingress and backup qualification.
+services:
+  api:
+    image: ${ONESA_SECURITY_IMAGE:?Set exact reviewed image digest}
+    env_file:
+      - /etc/onesa/security/api.env
+    environment:
+      ONESA_SECURITY_ENV: production
+      COLLECTOR_REQUIRE_MTLS: "true"
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    ports:
+      - "127.0.0.1:${ONESA_SECURITY_HOST_PORT:-18080}:8080"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2).read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

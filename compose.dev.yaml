@@ -12,6 +12,7 @@ services:
       - ./infra/initdb/01-install.sh:/docker-entrypoint-initdb.d/01-install.sh:ro
       - ./services/api/migrations/001_initial.sql:/schema/001_initial.sql:ro
       - ./services/api/migrations/002_findings_and_approvals.sql:/schema/002_findings_and_approvals.sql:ro
+      - ./services/api/migrations/003_ai_agent_spans.sql:/schema/003_ai_agent_spans.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d onesa_security"]
       interval: 5s

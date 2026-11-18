@@ -22,6 +22,11 @@ def run(command, *, cwd=ROOT):
 def main():
     report = json.loads(REPORT_PATH.read_text())
     if report.get("status") != "drift":
+        report["candidate_compatibility"] = {
+            "outcome": "skipped",
+            "reason": "No version candidates because registry status is " + str(report.get("status", "missing")),
+        }
+        REPORT_PATH.write_text(json.dumps(report, indent=2) + "\n")
         print("Candidate suites skipped because the package registry result is unavailable or current.")
         return 0
 

@@ -7,7 +7,7 @@ const uuid = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
 
 type RouteContext = {params: Promise<{path: string[]}>};
 
-async function process(req: NextRequest, context: RouteContext) {
+async function handleRequest(req: NextRequest, context: RouteContext) {
   const session = await auth0.getSession();
   if (!session) return NextResponse.json({error: "Sign in required"}, {status: 401});
   const relative = (await context.params).path.join("/");
@@ -36,6 +36,6 @@ async function process(req: NextRequest, context: RouteContext) {
   return NextResponse.json(result.data, {headers: {"Cache-Control": "no-store"}});
 }
 
-export async function GET(req: NextRequest, ctx: RouteContext) { return process(req, ctx); }
-export async function POST(req: NextRequest, ctx: RouteContext) { return process(req, ctx); }
-export async function PATCH(req: NextRequest, ctx: RouteContext) { return process(req, ctx); }
+export async function GET(req: NextRequest, ctx: RouteContext) { return handleRequest(req, ctx); }
+export async function POST(req: NextRequest, ctx: RouteContext) { return handleRequest(req, ctx); }
+export async function PATCH(req: NextRequest, ctx: RouteContext) { return handleRequest(req, ctx); }

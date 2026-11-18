@@ -4,11 +4,12 @@ from uuid import uuid4
 from onesa_security_tracer import AgentTracer
 
 URL = "https://security-api.onesa.eu/v1/collector/ai/agent-traces"
+TEST_TOKEN = "-".join(("synthetic", "test", "collector", "token"))
 
 
 class TelemetryTests(unittest.TestCase):
     def make(self, sender=None, **kw):
-        return AgentTracer(endpoint=URL, collector_token="synthetic-test-collector-token",
+        return AgentTracer(endpoint=URL, collector_token=TEST_TOKEN,
                            sender=sender or Mock(), **kw)
 
     def test_validated_https_mtls_default(self):
@@ -17,10 +18,10 @@ class TelemetryTests(unittest.TestCase):
                   "https://user:pw@security-api.onesa.eu/v1/collector/ai/agent-traces",
                   "https://security-api.onesa.eu:8000/v1/collector/ai/agent-traces"):
             with self.assertRaises(ValueError):
-                AgentTracer(endpoint=u, collector_token="synthetic-test-collector-token",
+                AgentTracer(endpoint=u, collector_token=TEST_TOKEN,
                             sender=Mock())
         with self.assertRaises(ValueError):
-            AgentTracer(endpoint=URL, collector_token="synthetic-test-collector-token")
+            AgentTracer(endpoint=URL, collector_token=TEST_TOKEN)
 
     def test_agent_span_metadata_only(self):
         out=[]

@@ -18,7 +18,8 @@ def test_postgres_real_force_rls():
     url = os.environ["ONESA_RLS_TEST_APP_URL"]
     assert url.startswith("postgresql+") and "_test" in url, "Refuse non-test databases"
     engine = create_engine(url)
-    tenant_a, tenant_b = str(uuid4()), str(uuid4())
+    tenant_a = "11111111-1111-4111-8111-111111111111"
+    tenant_b = "22222222-2222-4222-8222-222222222222"
     try:
         with Session(engine) as db:
             role = db.execute(text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")).one()
@@ -28,16 +29,32 @@ def test_postgres_real_force_rls():
             for table in tables:
                 enabled = db.execute(text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname=:table"), {"table": table}).one()
                 assert enabled == (True, True), f"RLS missing for {table}"
-            # A superuser fixture seeds two isolated organizations in CI before this test.
-            seeded = db.execute(text("SELECT id FROM organizations")).fetchall()
-            assert not seeded, "No tenant must be visible without RLS context"
+            # The migration-owner CI fixture seeded two tenants. Without
+            # context, even real rows must be completely invisible.
+            assert db.execute(text("SELECT id FROM organizations")).scalars().all() == []
+            assert db.execute(text("SELECT subject FROM memberships")).scalars().all() == []
+
             tenant_context(db, tenant_a)
-            assert db.execute(text("SELECT id FROM organizations WHERE id=:id"), {"id": tenant_b}).fetchone() is None
-            assert db.execute(text("SELECT id FROM memberships WHERE tenant_id=:id"), {"id": tenant_b}).fetchone() is None
-            # A test app role must not write a different tenant even if SQL is manually crafted.
+            assert db.execute(text("SELECT id FROM organizations")).scalars().all() == [tenant_a]
+            assert db.execute(text("SELECT subject FROM memberships")).scalars().all() == ["synthetic-a"]
+            assert db.execute(text("SELECT id FROM organizations WHERE id=:id"), {"id": tenant_b}).first() is None
+            assert db.execute(text("SELECT subject FROM memberships WHERE tenant_id=:id"), {"id": tenant_b}).first() is None
+
+            # RLS must block creating a THIRD tenant, not merely trigger a
+            # duplicate-key error from inserting an existing fixture ID.
             from sqlalchemy.exc import DBAPIError
+            forbidden = str(uuid4())
             with pytest.raises(DBAPIError):
-                db.execute(text("INSERT INTO organizations (id,name,created_at) VALUES (:id,'blocked', now())"), {"id": tenant_b})
+                db.execute(
+                    text("INSERT INTO organizations (id,name,created_at) VALUES (:id,'cross-tenant', now())"),
+                    {"id": forbidden},
+                )
+            db.rollback()
+
+            tenant_context(db, tenant_b)
+            assert db.execute(text("SELECT id FROM organizations")).scalars().all() == [tenant_b]
+            assert db.execute(text("SELECT subject FROM memberships")).scalars().all() == ["synthetic-b"]
+            assert db.execute(text("SELECT id FROM organizations WHERE id=:id"), {"id": tenant_a}).first() is None
             db.rollback()
     finally:
         engine.dispose()

@@ -24,6 +24,8 @@ services:
       DATABASE_URL: postgresql+psycopg://onesa_api:${DEV_APP_DB_PASSWORD}@db:5432/onesa_security
       OIDC_ISSUER: https://auth.onesa.eu/
       OIDC_AUDIENCE: https://security-api.onesa.eu
+      ONESA_SECURITY_ENV: development
+      ONESA_DEV_ISOLATED: "1" # explicitly acknowledge loopback-only developer service
       COLLECTOR_REQUIRE_MTLS: "false" # isolated developer preview ONLY, no public ingress
     depends_on:
       db: {condition: service_healthy}

@@ -52,8 +52,8 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             raise HTTPException(401, "Bearer access token required")
         if not x_onesa_organization:
             raise HTTPException(400, "Organization header required")
-        subject = verify_access_token(authorization[7:], cfg)
-        return authorize_member(db, subject, x_onesa_organization)
+        access = verify_access_token(authorization[7:], cfg)
+        return authorize_member(db, access, x_onesa_organization)
 
     def collector_principal(request: Request, authorization: str | None = Header(None), db: Session = Depends(get_db)):
         if not authorization or not authorization.startswith("Collector "):

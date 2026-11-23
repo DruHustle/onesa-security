@@ -4,8 +4,21 @@ import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
 import {setTimeout as sleep} from "node:timers/promises";
 import {existsSync} from "node:fs";
+import {canOpenSection, hasAnalystAccess, sections} from "../lib/nav.ts";
 
 assert.ok(existsSync(".next/BUILD_ID"), "Run npm run build before the smoke test");
+const management = sections.find(section => section.slug === "administration");
+assert.ok(management);
+assert.equal(canOpenSection(management, "viewer"), false);
+assert.equal(canOpenSection(management, "analyst"), false);
+assert.equal(canOpenSection(management, "admin"), true);
+assert.equal(canOpenSection(management, "owner"), true);
+const traces = sections.find(section => section.slug === "ai-agent-traces");
+assert.ok(traces);
+assert.equal(canOpenSection(traces, "viewer"), false);
+assert.equal(canOpenSection(traces, "analyst"), true);
+assert.equal(hasAnalystAccess("viewer"), false);
+assert.equal(hasAnalystAccess("analyst"), true);
 const port=String(30000+Math.floor(Math.random()*2000));
 const root="http://127.0.0.1:"+port;
 const env={...process.env, NODE_ENV:"production"};
@@ -57,6 +70,11 @@ try {
   const signInLocation=new URL(restricted.headers.get("location"),root);
   assert.equal(signInLocation.pathname,"/auth/login");
   assert.equal(signInLocation.searchParams.get("returnTo"),"/ai-agent-traces");
+  const admin = await get("/administration");
+  assert.ok([302,303,307,308].includes(admin.status));
+  const adminSignIn = new URL(admin.headers.get("location"),root);
+  assert.equal(adminSignIn.pathname,"/auth/login");
+  assert.equal(adminSignIn.searchParams.get("returnTo"),"/administration");
   assert.equal(page.headers.get("x-frame-options"),"DENY");
   console.log("7 runtime checks PASS: health, fail-closed readiness, no sign-in, denied data API, safe landing, protected page, headers");
 }catch(error){

@@ -1,15 +1,16 @@
 import Link from "next/link";
-import { sections } from "../lib/nav";
+import { canOpenSection, sections } from "../lib/nav";
 
-export function Shell({children, active, name}: {children: React.ReactNode; active: string; name?: string}) {
+export function Shell({children, active, name, role}: {children: React.ReactNode; active: string; name?: string; role: string}) {
+  const available = sections.filter(section => canOpenSection(section, role));
   return (
     <div className="shell">
       <aside className="sidebar">
         <Link className="brand" href="/" aria-label="Onesa Security home"><span className="brand-icon">O</span><span><strong>ONESA</strong><small>SECURITY</small></span></Link>
         <div className="tenant-box"><span className="muted micro">ORGANIZATION</span><strong>Configured organization</strong><span className="tenant-verified"><span className="status-dot"/> Authenticated workspace</span></div>
         <nav aria-label="Security navigation">
-          {sections.map((s, i) => <div key={s.slug}>
-            {(i === 0 || sections[i - 1].group !== s.group) && <p className="nav-group">{s.group}</p>}
+          {available.map((s, i) => <div key={s.slug}>
+            {(i === 0 || available[i - 1].group !== s.group) && <p className="nav-group">{s.group}</p>}
             <Link href={s.slug ? `/${s.slug}` : "/"} className={`nav-item ${active === s.slug ? "active" : ""}`} aria-current={active === s.slug ? "page" : undefined}>
               <span>{s.short}</span>{!s.live && <span className="small-label">Planned</span>}
             </Link>
@@ -35,3 +36,18 @@ export function EmptyState({heading, body}: {heading: string; body: string}) {
 }
 
 export function Warning({children}: {children: React.ReactNode}) {return <div className="notice" role="status">{children}</div>}
+
+export function WorkspaceAccess({message}: {message: string}) {
+  return (
+    <main className="welcome" id="main-content">
+      <div className="welcome-inner">
+        <h1>Onesa Security workspace</h1>
+        <p>{message}</p>
+        <div className="welcome-actions">
+          <a href="https://account.onesa.eu/">View my Onesa account</a>
+          <a href="/auth/logout">Sign out of Onesa</a>
+        </div>
+      </div>
+    </main>
+  );
+}

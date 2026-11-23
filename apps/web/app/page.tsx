@@ -1,12 +1,13 @@
-import {auth0, identityConfigured} from "../lib/auth0";
+import {auth0} from "../lib/auth0";
 import {securityApi} from "../lib/server-api";
 import {Shell, SectionHeader, Warning, EmptyState} from "../components/Shell";
+import {SecurityWelcome} from "../components/SecurityWelcome";
 
 interface Summary {organization_id: string; role: string; assets: number; events: number; alerts: number; collectors: number; findings: number; remediation_proposals: number; real_data: boolean; source: string}
 
 export default async function Overview() {
   const session = await auth0.getSession();
-  if (!session) return <main className="welcome" id="main-content"><div className="welcome-inner"><div className="brand-icon big">O</div><span className="eyebrow">ONESA UG / SECURITY</span><h1>One control plane. Verified security visibility.</h1><p>Protect AI workloads, analyze authorized security events and investigate evidence-backed alerts. Access requires an existing Onesa Identity account and product membership.</p>{identityConfigured ? <a className="primary-link" href="/auth/login">Continue with Onesa</a> : <div className="notice" role="status">Secure sign-in is not yet configured. This foundation deployment is not accepting customer sessions.</div>}<small>No demo telemetry is presented as live protection.</small></div></main>;
+  if (!session) return <SecurityWelcome/>;
   const response = await securityApi<Summary>("/v1/overview");
   const cards = response.ok ? [
     {name: "Managed assets", value: response.data.assets, text: "Reporting through enrolled collectors"},

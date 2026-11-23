@@ -12,3 +12,7 @@ export const sections = [
   {slug: "integrations", title: "Integrations", short: "Integrations", group: "Manage", live: false},
   {slug: "administration", title: "Administration", short: "Administration", group: "Manage", live: false},
 ] as const;
+
+export function featureSignInPath(section: (typeof sections)[number]["slug"]) {
+  return "/auth/login?" + new URLSearchParams({returnTo: "/" + section});
+}

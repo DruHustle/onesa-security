@@ -46,10 +46,17 @@ try {
   assert.equal(privateApi.status,503,"Protected data API must fail closed");
   const page=await get("/");
   assert.equal(page.status,200);
-  assert.match(await page.text(), /Secure sign-in is not yet configured/);
+  const html=await page.text();
+  assert.match(html, /Secure sign-in is not yet configured/);
+  assert.match(html, /<h1>Onesa Security<\/h1>/);
+  assert.match(html, /<h3>Alert investigation<\/h3>/);
+  assert.match(html, /https:\/\/account\.onesa\.eu\/register\?product=security&amp;platform=web&amp;audience=user/);
+  assert.doesNotMatch(html, /<h1>Security command center<\/h1>/);
   const restricted=await get("/ai-agent-traces");
   assert.ok([302,303,307,308].includes(restricted.status));
-  assert.ok((restricted.headers.get("location")||"").includes("/auth/login"));
+  const signInLocation=new URL(restricted.headers.get("location"),root);
+  assert.equal(signInLocation.pathname,"/auth/login");
+  assert.equal(signInLocation.searchParams.get("returnTo"),"/ai-agent-traces");
   assert.equal(page.headers.get("x-frame-options"),"DENY");
   console.log("7 runtime checks PASS: health, fail-closed readiness, no sign-in, denied data API, safe landing, protected page, headers");
 }catch(error){

@@ -3,6 +3,7 @@ from functools import lru_cache
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import time
 import jwt
 from jwt import PyJWKClient
 from fastapi import HTTPException
@@ -12,6 +13,14 @@ from .database import tenant_context
 
 TENANT_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 ROLE_RANK = {"viewer": 0, "analyst": 1, "admin": 2, "owner": 3}
+ONESA_CLAIMS = "https://onesa.eu/claims/"
+PRIVILEGED_MFA_MAX_AGE = 300
+
+
+@dataclass(frozen=True)
+class VerifiedAccess:
+    subject: str
+    mfa_at: int | None
 
 
 @dataclass(frozen=True)
@@ -19,6 +28,7 @@ class Principal:
     tenant_id: str
     subject: str
     role: str
+    mfa_at: int | None = None
 
 
 @lru_cache(maxsize=8)
@@ -26,7 +36,7 @@ def _jwks_client(uri: str):
     return PyJWKClient(uri, cache_jwk_set=True, lifespan=300, timeout=4)
 
 
-def verify_access_token(token: str, settings) -> str:
+def verify_access_token(token: str, settings) -> VerifiedAccess:
     if len(token) > 8192:
         raise HTTPException(401, "Invalid access token")
     try:
@@ -38,24 +48,35 @@ def verify_access_token(token: str, settings) -> str:
         subject = claims["sub"]
         if not isinstance(subject, str) or len(subject) > 255 or not subject:
             raise ValueError("bad subject")
-        return subject
     except Exception:
         raise HTTPException(401, "Invalid access token") from None
+    # Onesa Identity stamps this product only after the live grant check.
+    # Tenant membership below remains the authority for tenant permissions.
+    if claims.get(ONESA_CLAIMS + "products") != ["security"]:
+        raise HTTPException(403, "An active Onesa Security product grant is required")
+    mfa_at = claims.get(ONESA_CLAIMS + "mfa_time")
+    return VerifiedAccess(subject, mfa_at if type(mfa_at) is int and 0 < mfa_at <= int(time()) else None)
 
 
-def authorize_member(session, subject: str, tenant_id: str) -> Principal:
+def authorize_member(session, access: VerifiedAccess, tenant_id: str) -> Principal:
     if not TENANT_RE.fullmatch(tenant_id):
         raise HTTPException(400, "Invalid organization identifier")
     tenant_context(session, tenant_id)
-    membership = session.get(Membership, (tenant_id, subject))
+    membership = session.get(Membership, (tenant_id, access.subject))
     if membership is None or membership.role not in ROLE_RANK:
         raise HTTPException(403, "Organization access denied")
-    return Principal(tenant_id, subject, membership.role)
+    if membership.role != "viewer" and access.mfa_at is None:
+        raise HTTPException(403, "Onesa MFA is required", headers={"X-Onesa-Auth-Requirement": "mfa"})
+    return Principal(tenant_id, access.subject, membership.role, access.mfa_at)
 
 
 def require_role(principal: Principal, minimum: str):
     if ROLE_RANK[principal.role] < ROLE_RANK[minimum]:
         raise HTTPException(403, "Insufficient organization role")
+    if minimum in {"admin", "owner"} and (
+        principal.mfa_at is None or int(time()) - principal.mfa_at > PRIVILEGED_MFA_MAX_AGE
+    ):
+        raise HTTPException(403, "Recent Onesa MFA is required", headers={"X-Onesa-Auth-Requirement": "mfa"})
 
 
 def authorize_collector(session, token: str, require_mtls: bool, mtls_verified: bool) -> Collector:

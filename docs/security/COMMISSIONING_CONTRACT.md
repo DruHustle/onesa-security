@@ -16,6 +16,8 @@ Vercel contains non-secret `AUTH0_DOMAIN`, `OIDC_AUDIENCE` and production `APP_B
 
 **First tenant:** bootstrap the approved stable Onesa UG tenant UUID and actual verified Auth0 subject using `app.bootstrap` on the commissioned database. The Onesa Identity `security` grant is distinct from tenant membership; both must be verified for the intended user and operator roles. Add `ONESA_ORGANIZATION_ID` and `ONESA_API_ORIGIN` to the Vercel project **only after** that deployment and grants exist.
 
+The Security API requires the signed Onesa product assertion and checks current tenant membership on every request. Verify that the dedicated client supplies a signed Onesa MFA timestamp for analysts, tenant administrators and owners. Collector administration, guardrail policy changes and remediation approval require a completed factor within five minutes. Exercise missing and expired factors alongside a successful reauthentication before activating the client.
+
 ## Acceptance sequence
 
 1. GitHub Actions on the exact source commit: 3/3 jobs green, including real disposable PostgreSQL RLS, actual Docker image, source security scans, Next.js build and fail-closed runtime tests

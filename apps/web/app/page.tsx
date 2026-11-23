@@ -1,13 +1,19 @@
-import {auth0} from "../lib/auth0";
+import {redirect} from "next/navigation";
+import {auth0, identityConfigured, registrationReviewPath} from "../lib/auth0";
 import {securityApi} from "../lib/server-api";
 import {Shell, SectionHeader, WorkspaceAccess, EmptyState} from "../components/Shell";
 import {SecurityWelcome} from "../components/SecurityWelcome";
 
 interface Summary {organization_id: string; role: string; assets: number; events: number; alerts: number; collectors: number; findings: number; remediation_proposals: number; real_data: boolean; source: string}
 
-export default async function Overview() {
+export default async function Overview({searchParams}: {searchParams: Promise<Record<string, string | string[] | undefined>>}) {
+  const {registration, "sign-in": signIn} = await searchParams;
   const session = await auth0.getSession();
-  if (!session) return <SecurityWelcome/>;
+  if (!session) {
+    if (registration === "complete" && identityConfigured)
+      redirect("/auth/login?" + new URLSearchParams({prompt: "none", returnTo: registrationReviewPath}));
+    return <SecurityWelcome registrationReturned={registration === "complete" || registration === "review"} signInInterrupted={signIn === "retry"}/>;
+  }
   const response = await securityApi<Summary>("/v1/overview");
   if (!response.ok) return <WorkspaceAccess message={response.error}/>;
   const cards = [

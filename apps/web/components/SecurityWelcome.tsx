@@ -28,13 +28,15 @@ const features = [
   },
 ] as const;
 
-export function SecurityWelcome() {
+export function SecurityWelcome({registrationReturned, signInInterrupted}: {registrationReturned?: boolean; signInInterrupted?: boolean} = {}) {
   return (
     <main className="welcome" id="main-content">
       <div className="welcome-inner welcome-tour">
         <div className="brand-icon big" aria-hidden="true">O</div>
         <h1>Onesa Security</h1>
         <p>Investigate security events, track reported assets and review proposed remediation. Sign in with an approved Onesa Security account to access your organization’s workspace.</p>
+        {registrationReturned && <p className="notice" role="status">Your organization must approve Security access. If you requested access, wait for your administrator to review it.</p>}
+        {signInInterrupted && <p className="notice" role="status">Onesa Security sign-in could not finish. If your access is approved, try signing in again.</p>}
         <div className="welcome-actions">
           {identityConfigured && <a className="primary-link" href="/auth/login">Sign in with Onesa</a>}
           <a href="https://account.onesa.eu/register?product=security&amp;platform=web&amp;audience=user">Create an Onesa account</a>

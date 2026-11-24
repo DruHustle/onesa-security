@@ -1,0 +1,41 @@
+name: Linux eBPF runtime
+
+on:
+  pull_request:
+    paths:
+      - agents/linux/ebpf_activity.py
+      - agents/linux/test_ebpf_activity.py
+      - .github/workflows/linux-ebpf.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux-ebpf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify capture and failure handling
+        working-directory: agents/linux
+        run: python3 -m unittest -v test_ebpf_activity.py
+      - name: Install the distribution tracer
+        run: |
+          sudo -n apt-get update
+          sudo -n apt-get install -y --no-install-recommends bpftrace
+      - name: Verify a real kernel capture with ordinary process launches
+        run: |
+          set -euo pipefail
+          sudo -n install -d -o root -g root -m 0755 /opt/onesa-ebpf-ci
+          sudo -n install -o root -g root -m 0644 agents/linux/ebpf_activity.py /opt/onesa-ebpf-ci/ebpf_activity.py
+          sudo -n /usr/bin/python3 -I /opt/onesa-ebpf-ci/ebpf_activity.py > "$RUNNER_TEMP/onesa-ebpf-sample.json" &
+          probe_pid=$!
+          for _ in {1..18}; do
+            if ! kill -0 "$probe_pid" 2>/dev/null; then break; fi
+            /usr/bin/true
+            sleep 1
+          done
+          wait "$probe_pid"
+          jq -e '.schema == "onesa.linux.process-exec.v1" and .sample_seconds == 10 and .process_exec_count > 0' "$RUNNER_TEMP/onesa-ebpf-sample.json"

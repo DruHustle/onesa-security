@@ -65,6 +65,11 @@ try {
   assert.match(html, /<h3>Alert investigation<\/h3>/);
   assert.match(html, /https:\/\/account\.onesa\.eu\/register\?product=security&amp;platform=web&amp;audience=user/);
   assert.doesNotMatch(html, /<h1>Security command center<\/h1>/);
+  const registrationReturn = await get("/?registration=complete");
+  assert.equal(registrationReturn.status, 200);
+  const registrationReturnHtml = await registrationReturn.text();
+  assert.match(registrationReturnHtml, /Your organization must approve Security access/);
+  assert.doesNotMatch(registrationReturnHtml, /<h1>Security command center<\/h1>/);
   const restricted=await get("/ai-agent-traces");
   assert.ok([302,303,307,308].includes(restricted.status));
   const signInLocation=new URL(restricted.headers.get("location"),root);

@@ -7,3 +7,5 @@ python3 collector.py --api https://security-api.example.test --credential-file /
 ```
 
 No root privilege required. This is not the native endpoint protection agent described in the product roadmap. It does not offer OS event subscriptions, offline buffering, signed updates, tamper protection, mutual TLS client identity, automatic patching, endpoint isolation, or Windows/macOS support. By design, the production API refuses collector writes until a trusted ingress establishes mTLS and passes a verified ASGI scope; this preview does not provide client certificates. Test only against a local nonproduction API explicitly configured with `COLLECTOR_REQUIRE_MTLS=false` inside an isolated network.
+
+For an opt-in, local eBPF activity sample on an authorized Linux test VM, see [Linux eBPF process activity](EBPF.md).

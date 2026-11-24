@@ -13,6 +13,22 @@ def test_tenant_and_role_boundaries(harness):
     assert client.get("/v1/assets", headers={"Authorization": "Bearer owner-A", "X-Onesa-Organization": "blah"}).status_code == 400
 
 
+def test_staff_authentication_and_privileged_mfa(harness):
+    client, auth, _, _ = harness
+    assert client.get("/v1/overview", headers=auth("viewer-A", mfa_age=None)).status_code == 200
+    for subject in ("analyst-A", "owner-A"):
+        denied = client.get("/v1/overview", headers=auth(subject, mfa_age=None))
+        assert denied.status_code == 403
+        assert denied.headers["X-Onesa-Auth-Requirement"] == "mfa"
+
+    assert client.get("/v1/overview", headers=auth(mfa_age=360)).status_code == 200
+    denied = client.post("/v1/collectors", headers=auth(mfa_age=360), json={"name": "fixture"})
+    assert denied.status_code == 403
+    assert denied.headers["X-Onesa-Auth-Requirement"] == "mfa"
+    assert client.get("/v1/overview", headers=auth()).json()["collectors"] == 0
+    assert client.post("/v1/collectors", headers=auth(mfa_age=30), json={"name": "fixture"}).status_code == 200
+
+
 def test_full_telemetry_to_alert_to_case(harness):
     client, auth, a, b = harness
     enrolled = client.post("/v1/collectors", json={"name": "Ubuntu collector"}, headers=auth())

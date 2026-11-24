@@ -29,11 +29,25 @@ def test_jwt_audience_and_issuer_enforced_without_network(monkeypatch):
     settings = Settings(database_url="sqlite://", oidc_issuer="https://auth.onesa.eu/", oidc_audience="https://security-api.onesa.eu")
     now = datetime.now(timezone.utc)
     base = {"sub": "auth0|user-001", "iat": now, "exp": now + timedelta(minutes=5),
-            "iss": "https://auth.onesa.eu/", "aud": "https://security-api.onesa.eu"}
+            "iss": "https://auth.onesa.eu/", "aud": "https://security-api.onesa.eu",
+            auth.ONESA_CLAIMS + "products": ["security"]}
     def encode(claims):
         return jwt.encode(claims, key, algorithm="RS256")
-    assert auth.verify_access_token(encode(base), settings) == "auth0|user-001"
+    assert auth.verify_access_token(encode(base), settings) == auth.VerifiedAccess("auth0|user-001", None)
     for replacement in ({"aud": "https://wrong.invalid"}, {"iss": "https://attacker.invalid/"},
                         {"exp": now - timedelta(minutes=10)}):
         with pytest.raises(HTTPException):
             auth.verify_access_token(encode({**base, **replacement}), settings)
+
+    product = auth.ONESA_CLAIMS + "products"
+    absent_product = {name: value for name, value in base.items() if name != product}
+    for invalid in (absent_product, {**base, product: ["portal"]}, {**base, product: "security"}):
+        with pytest.raises(HTTPException) as error:
+            auth.verify_access_token(encode(invalid), settings)
+        assert error.value.status_code == 403
+
+    mfa_time = auth.ONESA_CLAIMS + "mfa_time"
+    factor_time = int(now.timestamp()) - 60
+    assert auth.verify_access_token(encode({**base, mfa_time: factor_time}), settings).mfa_at == factor_time
+    for invalid in ("recent", True, int(now.timestamp()) + 120, -1):
+        assert auth.verify_access_token(encode({**base, mfa_time: invalid}), settings).mfa_at is None

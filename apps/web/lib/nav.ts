@@ -12,3 +12,16 @@ export const sections = [
   {slug: "integrations", title: "Integrations", short: "Integrations", group: "Manage", live: false},
   {slug: "administration", title: "Administration", short: "Administration", group: "Manage", live: false},
 ] as const;
+
+export function featureSignInPath(section: (typeof sections)[number]["slug"]) {
+  return "/auth/login?" + new URLSearchParams({returnTo: "/" + section});
+}
+
+export function canOpenSection(section: (typeof sections)[number], role: string) {
+  if (section.slug === "ai-agent-traces") return hasAnalystAccess(role);
+  return section.group !== "Manage" || role === "admin" || role === "owner";
+}
+
+export function hasAnalystAccess(role: string) {
+  return role === "analyst" || role === "admin" || role === "owner";
+}

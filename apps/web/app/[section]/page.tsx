@@ -1,8 +1,8 @@
 import {notFound, redirect} from "next/navigation";
 import {auth0} from "../../lib/auth0";
 import {securityApi} from "../../lib/server-api";
-import {sections} from "../../lib/nav";
-import {Shell, SectionHeader, EmptyState, Warning} from "../../components/Shell";
+import {canOpenSection, hasAnalystAccess, featureSignInPath, sections} from "../../lib/nav";
+import {Shell, SectionHeader, EmptyState, Warning, WorkspaceAccess} from "../../components/Shell";
 import {AgentTraceLive} from "../../components/AgentTraceLive";
 import {GuardrailTester} from "../../components/GuardrailTester";
 import {AlertAction} from "../../components/AlertAction";
@@ -24,7 +24,13 @@ export default async function SectionPage({params}: {params: Promise<{section: s
   const found = sections.find(x=>x.slug === section);
   if (!found || !section) notFound();
   const session = await auth0.getSession();
-  if (!session) redirect("/auth/login");
+  if (!session) redirect(featureSignInPath(found.slug));
+  const access = await securityApi<{role: string}>("/v1/overview");
+  if (!access.ok) return <WorkspaceAccess message={access.error}/>;
+  if (!canOpenSection(found, access.data.role)) {
+    return <WorkspaceAccess message="Your organization role does not permit access to this section."/>;
+  }
+  const canReview = hasAnalystAccess(access.data.role);
   const descriptions: Record<string,string> = {
     "ai-security": "Inspect authorized AI content with deterministic guardrails. The evaluation result is not a guarantee of safety.",
     "ai-agent-traces": "Agent execution metadata reported by authorized instrumentation. Refresh to retrieve recent spans; raw arguments and prompts are never retained.",
@@ -35,15 +41,15 @@ export default async function SectionPage({params}: {params: Promise<{section: s
     "security-upgrades": "Documented mitigation proposals, separation of duties and non-executing approvals.",
     "compliance-reports": "Observed engineering evidence and gaps, not legal compliance or certification.",
   };
-  return <Shell active={section} name={session.user.name}><SectionHeader kicker={`${found.group.toUpperCase()} / ${found.live ? "WORKING FOUNDATION" : "PLANNED MODULE"}`} title={found.title} description={descriptions[section] || "This module is part of the Onesa Security roadmap. It is intentionally inactive until it can produce evidence-backed results."}/>
+  return <Shell active={section} name={session.user.name} role={access.data.role}><SectionHeader kicker={`${found.group.toUpperCase()} / ${found.live ? "WORKING FOUNDATION" : "PLANNED MODULE"}`} title={found.title} description={descriptions[section] || "This module is part of the Onesa Security roadmap. It is intentionally inactive until it can produce evidence-backed results."}/>
     {!found.live && <><Warning>Not enabled. No claims of protection, integration, compliance or successful remediation are made for this module.</Warning><div className="panel"><EmptyState heading="Module not commissioned" body="Implementation requires validated integration permissions, product authorization and independent acceptance tests. Current data is not simulated."/></div></>}
     {section === "ai-security" && <AIPage/>}
     {section === "ai-agent-traces" && <AgentTracesPage/>}
     {section === "threat-detection" && <ThreatPage/>}
-    {section === "security-operations" && <OperationsPage/>}
+    {section === "security-operations" && <OperationsPage canReview={canReview}/>}
     {section === "assets-endpoints" && <AssetsPage/>}
-    {section === "vulnerabilities" && <FindingsPage/>}
-    {section === "security-upgrades" && <UpgradesPage subject={session.user.sub || ""}/>}
+    {section === "vulnerabilities" && <FindingsPage canReview={canReview}/>}
+    {section === "security-upgrades" && <UpgradesPage subject={session.user.sub || ""} canReview={canReview} canApprove={access.data.role === "owner"}/>}
     {section === "compliance-reports" && <CompliancePage/>}
   </Shell>;
 }
@@ -64,11 +70,11 @@ async function ThreatPage() {
     {response.data.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Event type</th><th scope="col">Subject reference</th><th scope="col">Occurred</th><th scope="col">Event ID</th></tr></thead><tbody>{response.data.map(e=><tr key={e.id}><td><span className="type-label">{e.event_type}</span></td><td>{e.subject_ref}</td><td>{date(e.occurred_at)}</td><td className="mono">{e.id.slice(0,8)}…</td></tr>)}</tbody></table></div> : <EmptyState heading="No events collected" body="Only verified collector ingestions appear here. A blank stream does not mean an environment is protected."/>}</section>;
 }
 
-async function OperationsPage() {
+async function OperationsPage({canReview}: {canReview: boolean}) {
   const response = await securityApi<Alert[]>("/v1/alerts");
   if (!response.ok) return <Warning>{response.error}</Warning>;
   return <section className="panel"><div className="panel-heading"><div><h2>Investigation queue</h2><p>Events create explainable alerts based on versioned detection logic.</p></div><span className="label-pill">{response.data.length} alerts shown</span></div>
-    {response.data.length ? <div className="case-list">{response.data.map(a=><article className="case" key={a.id}><div className="case-info"><div className="case-tags"><span className={`severity ${a.severity}`}>{a.severity.toUpperCase()}</span><span className="type-label">{a.rule_id}</span><span className="status-tag">{a.status}</span></div><h3>{a.title}</h3><p>{a.explanation}</p><div className="case-meta"><span>Subject: {a.subject_ref}</span><span>{date(a.created_at)}</span><span>{a.event_ids.length} evidence event(s)</span></div>{a.disposition && <p className="disposition"><strong>Disposition:</strong> {a.disposition}</p>}</div><AlertAction id={a.id} status={a.status}/></article>)}</div> : <EmptyState heading="No detection alerts" body="New rule hits from real events will appear in this queue. An empty queue is not evidence that no threats exist."/>}</section>;
+    {response.data.length ? <div className="case-list">{response.data.map(a=><article className="case" key={a.id}><div className="case-info"><div className="case-tags"><span className={`severity ${a.severity}`}>{a.severity.toUpperCase()}</span><span className="type-label">{a.rule_id}</span><span className="status-tag">{a.status}</span></div><h3>{a.title}</h3><p>{a.explanation}</p><div className="case-meta"><span>Subject: {a.subject_ref}</span><span>{date(a.created_at)}</span><span>{a.event_ids.length} evidence event(s)</span></div>{a.disposition && <p className="disposition"><strong>Disposition:</strong> {a.disposition}</p>}</div>{canReview && <AlertAction id={a.id} status={a.status}/>}</article>)}</div> : <EmptyState heading="No detection alerts" body="New rule hits from real events will appear in this queue. An empty queue is not evidence that no threats exist."/>}</section>;
 }
 
 async function AssetsPage() {
@@ -79,22 +85,22 @@ async function AssetsPage() {
 }
 
 
-async function FindingsPage() {
+async function FindingsPage({canReview}: {canReview: boolean}) {
   const response = await securityApi<Finding[]>("/v1/findings");
   if (!response.ok) return <Warning>{response.error}</Warning>;
   return <><Warning>Only reports from enrolled collectors appear here. A finding is not evidence of exploitation, confirmed CVE applicability, or proof that any asset is protected.</Warning>
     <section className="panel"><div className="panel-heading"><div><h2>Exposure and vulnerability review</h2><p>Most recent 100 source-attributed records.</p></div><span className="label-pill">{response.data.length} findings</span></div>
-    {response.data.length ? <div className="case-list">{response.data.map(f=><article className="case" key={f.id}><div className="case-info"><div className="case-tags"><span className={`severity ${f.severity}`}>{f.severity.toUpperCase()}</span><span className="type-label">{f.category}</span><span className="status-tag">{f.status.replaceAll("_", " ")}</span></div><h3>{f.title}</h3><div className="case-meta"><span>Asset {f.asset_ref}</span><span>{f.cve_id || "No CVE claim"}</span><span>Evidence {f.evidence_ref}</span><span>{date(f.last_seen)}</span></div><small>{f.source}</small></div><FindingAction id={f.id}/></article>)}</div>
+    {response.data.length ? <div className="case-list">{response.data.map(f=><article className="case" key={f.id}><div className="case-info"><div className="case-tags"><span className={`severity ${f.severity}`}>{f.severity.toUpperCase()}</span><span className="type-label">{f.category}</span><span className="status-tag">{f.status.replaceAll("_", " ")}</span></div><h3>{f.title}</h3><div className="case-meta"><span>Asset {f.asset_ref}</span><span>{f.cve_id || "No CVE claim"}</span><span>Evidence {f.evidence_ref}</span><span>{date(f.last_seen)}</span></div><small>{f.source}</small></div>{canReview && <FindingAction id={f.id}/>}</article>)}</div>
     : <EmptyState heading="No reported weaknesses" body="Enrolled collectors must report real asset-scoped findings before the review queue is populated."/>}</section></>;
 }
 
-async function UpgradesPage({subject}: {subject: string}) {
+async function UpgradesPage({subject, canReview, canApprove}: {subject: string; canReview: boolean; canApprove: boolean}) {
   const [findings, proposals] = await Promise.all([securityApi<Finding[]>("/v1/findings"), securityApi<Proposal[]>("/v1/remediation-proposals")]);
   if (!findings.ok || !proposals.ok) return <Warning>{!findings.ok ? findings.error : !proposals.ok ? proposals.error : "Unavailable"}</Warning>;
   return <><Warning>Remediation execution is disabled. Approving a proposal does not patch machines, change firewalls, rotate production credentials or alter industrial control systems.</Warning>
-    <ProposalCreator findings={findings.data.filter(f=>f.status === "reported").map(f=>({id:f.id,title:f.title}))}/>
+    {canReview && <ProposalCreator findings={findings.data.filter(f=>f.status === "reported").map(f=>({id:f.id,title:f.title}))}/>}
     <section className="panel"><div className="panel-heading"><div><h2>Reviewed change queue</h2><p>Two-person approvals and auditable planning only.</p></div><span className="label-pill">{proposals.data.length} proposals</span></div>
-    {proposals.data.length ? <div className="case-list">{proposals.data.map(p=><article className="case" key={p.id}><div className="case-info"><div className="case-tags"><span className="type-label">{p.action_type.replaceAll("_"," ")}</span><span className="status-tag">{p.status}</span></div><h3>{p.action_summary}</h3><p><strong>Impact:</strong> {p.impact_summary}</p><p><strong>Rollback:</strong> {p.rollback_plan}</p><div className="case-meta"><span>Requested by {p.requested_by}</span><span>{date(p.created_at)}</span></div><small>No remote command execution</small></div><ProposalDecision id={p.id} status={p.status} ownRequest={p.requested_by === subject}/></article>)}</div>
+    {proposals.data.length ? <div className="case-list">{proposals.data.map(p=><article className="case" key={p.id}><div className="case-info"><div className="case-tags"><span className="type-label">{p.action_type.replaceAll("_"," ")}</span><span className="status-tag">{p.status}</span></div><h3>{p.action_summary}</h3><p><strong>Impact:</strong> {p.impact_summary}</p><p><strong>Rollback:</strong> {p.rollback_plan}</p><div className="case-meta"><span>Requested by {p.requested_by}</span><span>{date(p.created_at)}</span></div><small>No remote command execution</small></div>{canApprove && <ProposalDecision id={p.id} status={p.status} ownRequest={p.requested_by === subject}/>}</article>)}</div>
     : <EmptyState heading="No upgrade plans" body="Create a documented proposal linked to a reported finding. A different owner must review it."/>}</section></>;
 }
 

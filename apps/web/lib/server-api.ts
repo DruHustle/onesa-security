@@ -23,7 +23,13 @@ export async function securityApi<T>(path: string, init?: RequestInit): Promise<
         ...(init?.body ? {"Content-Type": "application/json"} : {}),
       },
     });
-    if (!response.ok) return {ok: false, status: response.status, error: response.status === 403 ? "Access to this organization was denied" : "Security API request failed"};
+    if (!response.ok) {
+      const mfaRequired = response.status === 403 && response.headers.get("X-Onesa-Auth-Requirement") === "mfa";
+      const error = mfaRequired
+        ? "Sign in again with Onesa and complete multi-factor authentication"
+        : response.status === 403 ? "Access to this organization was denied" : "Security API request failed";
+      return {ok: false, status: response.status, error};
+    }
     return {ok: true, data: await response.json() as T};
   } catch {
     return {ok: false, status: 503, error: "Security API or identity session unavailable"};

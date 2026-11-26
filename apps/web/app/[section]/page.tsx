@@ -24,7 +24,7 @@ export default async function SectionPage({params}: {params: Promise<{section: s
   const found = sections.find(x=>x.slug === section);
   if (!found || !section) notFound();
   const session = await auth0.getSession();
-  if (!session) redirect("/auth/login");
+  if (!session) redirect("/auth/login?" + new URLSearchParams({returnTo: "/" + found.slug}));
   const descriptions: Record<string,string> = {
     "ai-security": "Inspect authorized AI content with deterministic guardrails. The evaluation result is not a guarantee of safety.",
     "ai-agent-traces": "Agent execution metadata reported by authorized instrumentation. Refresh to retrieve recent spans; raw arguments and prompts are never retained.",

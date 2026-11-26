@@ -49,7 +49,9 @@ try {
   assert.match(await page.text(), /Secure sign-in is not yet configured/);
   const restricted=await get("/ai-agent-traces");
   assert.ok([302,303,307,308].includes(restricted.status));
-  assert.ok((restricted.headers.get("location")||"").includes("/auth/login"));
+  const login = new URL(restricted.headers.get("location"), "http://localhost");
+  assert.equal(login.pathname, "/auth/login");
+  assert.equal(login.searchParams.get("returnTo"), "/ai-agent-traces");
   assert.equal(page.headers.get("x-frame-options"),"DENY");
   console.log("7 runtime checks PASS: health, fail-closed readiness, no sign-in, denied data API, safe landing, protected page, headers");
 }catch(error){
